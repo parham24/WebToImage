@@ -4,14 +4,39 @@
     <application
         android:label="WebToImage">
 
+        <!-- Launcher -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <!-- Print destination that appears in Chrome -> Print -->
+        <service
+            android:name=".print.WebToImagePrintService"
+            android:exported="false"
+            android:permission="android.permission.BIND_PRINT_SERVICE">
+            <intent-filter>
+                <action android:name="android.printservice.PrintService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.printservice"
+                android:resource="@xml/printservice" />
+        </service>
+
+        <!-- UI screens (فعلاً خالی؛ بعداً کد می‌نویسیم) -->
+        <activity
+            android:name=".ui.JobActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.CropActivity"
+            android:exported="false" />
+
     </application>
+
 </manifest>
