@@ -31,21 +31,23 @@ object AppLog {
     private fun append(ctx: Context, level: String, msg: String, tr: Throwable?) {
         runCatching {
             val file = logFile(ctx)
-            val line = buildString {
-                append(df.format(Date()))
-                append(" ")
-                append(level)
-                append(" ")
-                append(msg)
-                if (tr != null) {
-                    append("
-")
-                    append(Log.getStackTraceString(tr))
-                }
-                append("
-")
+
+            val sb = StringBuilder()
+            sb.append(df.format(Date()))
+            sb.append(' ')
+            sb.append(level)
+            sb.append(' ')
+            sb.append(msg)
+            sb.append('
+')
+
+            if (tr != null) {
+                sb.append(Log.getStackTraceString(tr))
+                sb.append('
+')
             }
-            file.appendText(line)
+
+            file.appendText(sb.toString())
         }
     }
 
@@ -58,4 +60,4 @@ object AppLog {
         val f = logFile(ctx)
         if (f.exists()) f.writeText("")
     }
-                       }
+}
