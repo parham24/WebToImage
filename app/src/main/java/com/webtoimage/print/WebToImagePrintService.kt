@@ -1,5 +1,6 @@
 package com.webtoimage.print
 
+import android.print.PrintAttributes
 import android.print.PrinterCapabilitiesInfo
 import android.print.PrinterId
 import android.print.PrinterInfo
@@ -18,18 +19,18 @@ class WebToImagePrintService : PrintService() {
 
             private fun buildPrinterInfo(): PrinterInfo {
                 val caps = PrinterCapabilitiesInfo.Builder(pid)
-                    // یک “کاغذ” پیش‌فرض می‌گذاریم (A4) و حاشیه صفر
-                    .addMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4, true)
-                    .setMinMargins(android.print.PrintAttributes.Margins.NO_MARGINS)
-                    // یک رزولوشن پیش‌فرض (300dpi)
+                    // A4 و حداقل حاشیه
+                    .addMediaSize(PrintAttributes.MediaSize.ISO_A4, true)
+                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                    // رزولوشن پیش‌فرض
                     .addResolution(
-                        PrinterCapabilitiesInfo.Resolution("r300", "300 dpi", 300, 300),
+                        PrintAttributes.Resolution("r300", "300 dpi", 300, 300),
                         true
                     )
-                    // رنگ/سیاه‌سفید
+                    // حالت‌های رنگ
                     .setColorModes(
-                        PrinterCapabilitiesInfo.COLOR_MODE_COLOR or PrinterCapabilitiesInfo.COLOR_MODE_MONOCHROME,
-                        PrinterCapabilitiesInfo.COLOR_MODE_COLOR
+                        PrintAttributes.COLOR_MODE_COLOR or PrintAttributes.COLOR_MODE_MONOCHROME,
+                        PrintAttributes.COLOR_MODE_COLOR
                     )
                     .build()
 
@@ -38,24 +39,38 @@ class WebToImagePrintService : PrintService() {
                     .build()
             }
 
-            override fun onStartPrinterDiscovery(priorityList: MutableList<PrinterId>?) {
+            override fun onStartPrinterDiscovery(priorityList: MutableList<PrinterId>) {
                 addPrinters(listOf(buildPrinterInfo()))
             }
 
-            override fun onValidatePrinters(printerIds: MutableList<PrinterId>?) {
+            override fun onValidatePrinters(printerIds: MutableList<PrinterId>) {
+                // می‌توانی فقط همان پرینتر را دوباره اضافه/آپدیت کنی
                 addPrinters(listOf(buildPrinterInfo()))
             }
 
-            override fun onStartPrinterStateTracking(printerId: PrinterId?) {}
-            override fun onStopPrinterStateTracking(printerId: PrinterId?) {}
-            override fun onStopPrinterDiscovery() {}
-            override fun onDestroy() {}
+            override fun onStartPrinterStateTracking(printerId: PrinterId) {
+                // فعلاً چیزی لازم نیست
+            }
+
+            override fun onStopPrinterStateTracking(printerId: PrinterId) {
+                // فعلاً چیزی لازم نیست
+            }
+
+            override fun onStopPrinterDiscovery() {
+                // فعلاً چیزی لازم نیست
+            }
+
+            override fun onDestroy() {
+                // cleanup اگر لازم شد
+            }
         }
     }
 
     override fun onPrintJobQueued(printJob: PrintJob) {
-        // فعلاً کاری نمی‌کنیم (مرحله بعد: گرفتن PDF و باز کردن UI)
+        // هشدار: این فقط برای رد شدن از مرحله build است و منطق چاپ واقعی نیست.
         printJob.start()
+        // اگر می‌خواهی Job تمام شود (و گیر نکند) معمولاً باید complete() هم صدا زده شود.
+        // printJob.complete()
     }
 
     override fun onRequestCancelPrintJob(printJob: PrintJob) {
