@@ -1,5 +1,6 @@
 package com.webtoimage.print
 
+import android.os.ParcelFileDescriptor
 import android.print.PrintAttributes
 import android.print.PrinterCapabilitiesInfo
 import android.print.PrinterId
@@ -7,6 +8,7 @@ import android.print.PrinterInfo
 import android.printservice.PrintJob
 import android.printservice.PrintService
 import android.printservice.PrinterDiscoverySession
+import com.webtoimage.util.AppLog
 
 class WebToImagePrintService : PrintService() {
 
@@ -19,24 +21,23 @@ class WebToImagePrintService : PrintService() {
 
             private fun buildPrinterInfo(): PrinterInfo {
                 val caps = PrinterCapabilitiesInfo.Builder(pid)
-                    // A4 و حداقل حاشیه
                     .addMediaSize(PrintAttributes.MediaSize.ISO_A4, true)
                     .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
-                    // رزولوشن پیش‌فرض
                     .addResolution(
                         PrintAttributes.Resolution("r300", "300 dpi", 300, 300),
                         true
                     )
-                    // حالت‌های رنگ
                     .setColorModes(
                         PrintAttributes.COLOR_MODE_COLOR or PrintAttributes.COLOR_MODE_MONOCHROME,
                         PrintAttributes.COLOR_MODE_COLOR
                     )
                     .build()
 
-                return PrinterInfo.Builder(pid, "WebToImage (Save as Image)", PrinterInfo.STATUS_IDLE)
-                    .setCapabilities(caps)
-                    .build()
+                return PrinterInfo.Builder(
+                    pid,
+                    "WebToImage (Save as Image)",
+                    PrinterInfo.STATUS_IDLE
+                ).setCapabilities(caps).build()
             }
 
             override fun onStartPrinterDiscovery(priorityList: MutableList<PrinterId>) {
@@ -44,36 +45,43 @@ class WebToImagePrintService : PrintService() {
             }
 
             override fun onValidatePrinters(printerIds: MutableList<PrinterId>) {
-                // می‌توانی فقط همان پرینتر را دوباره اضافه/آپدیت کنی
                 addPrinters(listOf(buildPrinterInfo()))
             }
 
-            override fun onStartPrinterStateTracking(printerId: PrinterId) {
-                // فعلاً چیزی لازم نیست
-            }
-
-            override fun onStopPrinterStateTracking(printerId: PrinterId) {
-                // فعلاً چیزی لازم نیست
-            }
-
-            override fun onStopPrinterDiscovery() {
-                // فعلاً چیزی لازم نیست
-            }
-
-            override fun onDestroy() {
-                // cleanup اگر لازم شد
-            }
+            override fun onStartPrinterStateTracking(printerId: PrinterId) {}
+            override fun onStopPrinterStateTracking(printerId: PrinterId) {}
+            override fun onStopPrinterDiscovery() {}
+            override fun onDestroy() {}
         }
     }
 
     override fun onPrintJobQueued(printJob: PrintJob) {
-        // هشدار: این فقط برای رد شدن از مرحله build است و منطق چاپ واقعی نیست.
-        printJob.start()
-        // اگر می‌خواهی Job تمام شود (و گیر نکند) معمولاً باید complete() هم صدا زده شود.
-        // printJob.complete()
+        try {
+            AppLog.i(
+                this,
+                "onPrintJobQueued id=${printJob.id} queued=${printJob.isQueued} started=${printJob.isStarted}"
+            )
+
+            val pfd: ParcelFileDescriptor? = printJob.document?.data
+            if (pfd == null) {
+                AppLog.e(this, "PrintJob document/data is null")
+                printJob.fail("No document data")
+                return
+            }
+
+            // فعلاً فقط برای اینکه کرش نکند و job گیر نکند:
+            val started = printJob.start()
+            AppLog.i(this, "printJob.start() = $started")
+
+            val completed = printJob.complete()
+            AppLog.i(this, "printJob.complete() = $completed")
+        } catch (t: Throwable) {
+            AppLog.e(this, "Print crashed", t)
+            runCatching { printJob.fail(t.message ?: "Crash") }
+        }
     }
 
     override fun onRequestCancelPrintJob(printJob: PrintJob) {
-        printJob.cancel()
+        runCatching { printJob.cancel() }
     }
 }
