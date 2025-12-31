@@ -14,10 +14,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Share target: appears in Browser -> Share (اشتراک گذاری / هم‌رسانی) -->
+        <activity
+            android:name=".ui.ShareEntryActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- Print destination that appears in Chrome -> Print -->
         <service
             android:name=".print.WebToImagePrintService"
-            android:exported="false"
+            android:exported="true"
             android:permission="android.permission.BIND_PRINT_SERVICE">
             <intent-filter>
                 <action android:name="android.printservice.PrintService" />
@@ -28,7 +39,6 @@
                 android:resource="@xml/printservice" />
         </service>
 
-        <!-- UI screens (فعلاً خالی؛ بعداً کد می‌نویسیم) -->
         <activity
             android:name=".ui.JobActivity"
             android:exported="false" />
