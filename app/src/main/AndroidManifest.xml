@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="WebToImage">
 
@@ -14,7 +16,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Share target: appears in Browser -> Share (اشتراک گذاری / هم‌رسانی) -->
+        <!-- Share target -->
         <activity
             android:name=".ui.ShareEntryActivity"
             android:exported="true">
@@ -25,7 +27,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Print destination that appears in Chrome -> Print -->
+        <!-- Print service -->
         <service
             android:name=".print.WebToImagePrintService"
             android:exported="true"
@@ -38,6 +40,10 @@
                 android:name="android.printservice"
                 android:resource="@xml/printservice" />
         </service>
+
+        <activity
+            android:name=".ui.LogActivity"
+            android:exported="false" />
 
         <activity
             android:name=".ui.JobActivity"
