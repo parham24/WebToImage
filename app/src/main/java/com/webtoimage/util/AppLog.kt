@@ -32,22 +32,22 @@ object AppLog {
         runCatching {
             val file = logFile(ctx)
 
-            val sb = StringBuilder()
-            sb.append(df.format(Date()))
-            sb.append(' ')
-            sb.append(level)
-            sb.append(' ')
-            sb.append(msg)
-            sb.append('
-')
-
-            if (tr != null) {
-                sb.append(Log.getStackTraceString(tr))
-                sb.append('
-')
+            val line = buildString {
+                append(df.format(Date()))
+                append(" ")
+                append(level)
+                append(" ")
+                append(msg)
+                append("
+")
+                if (tr != null) {
+                    append(Log.getStackTraceString(tr))
+                    append("
+")
+                }
             }
 
-            file.appendText(sb.toString())
+            file.appendText(line)
         }
     }
 
@@ -60,4 +60,4 @@ object AppLog {
         val f = logFile(ctx)
         if (f.exists()) f.writeText("")
     }
-}
+                           }
