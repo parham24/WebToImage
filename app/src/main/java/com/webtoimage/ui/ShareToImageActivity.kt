@@ -38,7 +38,7 @@ class ShareToImageActivity : Activity() {
         }
 
         val prefs = getSharedPreferences("webtoimage", MODE_PRIVATE)
-        val desktopDefault = prefs.getBoolean("desktop_mode", false)
+        val desktopDefault = prefs.getBoolean("desktop_mode", true)
 
         val info = TextView(this).apply {
             text = "Loading…"
