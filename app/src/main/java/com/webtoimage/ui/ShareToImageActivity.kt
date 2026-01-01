@@ -32,6 +32,7 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class ShareToImageActivity : Activity() {
 
@@ -223,15 +224,26 @@ class ShareToImageActivity : Activity() {
 
         // ذخیره تصویر (viewport) + crop
         saveImgBtn.setOnClickListener {
-            try {
-                val full = captureViewport(webView)
-                val cropRect = overlay.getSelectionRect()
+    try {
+        val full = captureViewport(webView)
+        val cropRect = overlay.getSelectionRect()
 
-                val outBitmap = if (cropRect != null) {
-                    cropFromViewport(full, cropRect, webView.width, webView.height)
-                } else {
-                    full
-                }
+        val outBitmap = if (cropRect != null) {
+            cropFromViewport(full, cropRect, webView.width, webView.height)
+        } else {
+            full
+        }
+
+        val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
+        if (outBitmap !== full) outBitmap.recycle()
+        full.recycle()
+
+        info.text = "Saved image: $name"
+        // finish()  <-- اگر خواستی فقط اینجا (بعد از موفقیت) بزن، نه finally
+    } catch (_: Throwable) {
+        info.text = "Save failed"
+    }
+        }
 
                 val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
                 if (outBitmap !== full) outBitmap.recycle()
