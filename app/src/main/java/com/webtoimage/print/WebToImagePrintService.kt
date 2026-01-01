@@ -1,6 +1,7 @@
 package com.webtoimage.print
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -93,6 +94,10 @@ class WebToImagePrintService : PrintService() {
                             val height = (page.height * scale).toInt()
 
                             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
+                            // مهم: اگر PDF پس‌زمینه شفاف داشته باشد، بدون این خط
+                            // خروجی می‌تواند تیره/مشکی دیده شود. [web:595][web:843]
+                            bitmap.eraseColor(Color.WHITE)
 
                             val matrix = Matrix().apply { setScale(scale, scale) }
                             page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
