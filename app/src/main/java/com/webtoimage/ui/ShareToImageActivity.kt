@@ -30,6 +30,9 @@ class ShareToImageActivity : Activity() {
     private var currentLoad: String? = null
     private var isUrl: Boolean = false
 
+    // برای viewport injection فقط یک بار (اگر لازم شد)
+    private var injectedOnce = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -55,6 +58,12 @@ class ShareToImageActivity : Activity() {
         val reloadBtn = Button(this).apply { text = "RELOAD" }
         val clearSelBtn = Button(this).apply { text = "CLEAR" }
 
+        val selectToggle = ToggleButton(this).apply {
+            textOn = "SELECT: ON"
+            textOff = "SELECT: OFF"
+            isChecked = false
+        }
+
         val saveImgBtn = Button(this).apply {
             text = "CROP & SAVE (IMAGE)"
             isEnabled = false
@@ -77,10 +86,11 @@ class ShareToImageActivity : Activity() {
             addView(reloadBtn)
         }
 
-        // ردیف ۲: دکمه‌ها
+        // ردیف ۲: دکمه‌ها + انتخاب
         val row2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(24, 0, 24, 8)
+            addView(selectToggle)
             addView(clearSelBtn)
             addView(saveImgBtn)
             addView(savePdfBtn)
@@ -106,6 +116,9 @@ class ShareToImageActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            // خیلی مهم: پیش‌فرض خاموش تا اسکرول WebView کار کند
+            visibility = View.GONE
+            setSelectionEnabled(false)
         }
 
         val webContainer = FrameLayout(this).apply {
@@ -143,9 +156,25 @@ class ShareToImageActivity : Activity() {
         originalUa = webView.settings.userAgentString
         applyDesktopMode(webView, modeSwitch.isChecked)
 
+        // SELECT toggle: روشن = اجازه انتخاب کادر، خاموش = اسکرول آزاد
+        selectToggle.setOnCheckedChangeListener { _, on ->
+            overlay.clearSelection()
+            overlay.setSelectionEnabled(on)
+            overlay.visibility = if (on) View.VISIBLE else View.GONE
+        }
+
+        clearSelBtn.setOnClickListener { overlay.clearSelection() }
+
         modeSwitch.setOnCheckedChangeListener { _, checked ->
             prefs.edit().putBoolean("desktop_mode", checked).apply()
+            injectedOnce = false
+
             applyDesktopMode(webView, checked)
+
+            // کمک به اینکه نتیجه قبلی cache نشود
+            webView.clearCache(true)
+            webView.clearHistory()
+
             info.text = "Reloading…"
             saveImgBtn.isEnabled = false
             savePdfBtn.isEnabled = false
@@ -154,14 +183,13 @@ class ShareToImageActivity : Activity() {
         }
 
         reloadBtn.setOnClickListener {
+            injectedOnce = false
             info.text = "Reloading…"
             saveImgBtn.isEnabled = false
             savePdfBtn.isEnabled = false
             overlay.clearSelection()
             webView.reload()
         }
-
-        clearSelBtn.setOnClickListener { overlay.clearSelection() }
 
         // ذخیره تصویر (viewport) + crop
         saveImgBtn.setOnClickListener {
@@ -202,7 +230,17 @@ class ShareToImageActivity : Activity() {
             override fun onPageFinished(view: WebView, url: String) {
                 saveImgBtn.isEnabled = true
                 savePdfBtn.isEnabled = true
-                info.text = "Loaded. Drag to select area سپس Crop & Save، یا Save PDF برای کل صفحه."
+
+                // اگر desktop روشن است، یک بار viewport را هم (در صورت نیاز) اجبار کن و reload کن
+                if (modeSwitch.isChecked && !injectedOnce) {
+                    injectedOnce = true
+                    forceDesktopViewport(view)
+                    view.reload()
+                    return
+                }
+
+                info.text =
+                    "Loaded. SELECT: OFF برای اسکرول، SELECT: ON برای انتخاب کادر. سپس Crop & Save یا Save PDF."
             }
         }
 
@@ -233,31 +271,44 @@ class ShareToImageActivity : Activity() {
     }
 
     private fun applyDesktopMode(webView: WebView, enabled: Boolean) {
-        val settings = webView.settings
-        val baseUa = originalUa ?: settings.userAgentString
+        val s = webView.settings
 
         if (!enabled) {
-            settings.userAgentString = baseUa
-            settings.useWideViewPort = false
-            settings.loadWithOverviewMode = false
+            s.userAgentString = originalUa ?: s.userAgentString
+            s.useWideViewPort = false
+            s.loadWithOverviewMode = false
             return
         }
 
-        val newUa = try {
-            val start = baseUa.indexOf("(")
-            val end = baseUa.indexOf(")")
-            if (start != -1 && end != -1 && end > start) {
-                val androidPart = baseUa.substring(start, end + 1)
-                baseUa.replace(androidPart, "(X11; Linux x86_64)")
-            } else baseUa
-        } catch (_: Throwable) {
-            baseUa
-        }
+        // UA دسکتاپ ثابت
+        val desktopUA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-        // کمک به اینکه سایت نسخه دسکتاپ بدهد
-        settings.userAgentString = newUa.replace("Mobile", "").trim()
-        settings.useWideViewPort = true
-        settings.loadWithOverviewMode = true
+        s.userAgentString = desktopUA
+        s.useWideViewPort = true
+        s.loadWithOverviewMode = true
+
+        s.setSupportZoom(true)
+        s.builtInZoomControls = true
+        s.displayZoomControls = false
+
+        s.domStorageEnabled = true
+
+        // اجازه بده WebView خودش scale مناسب را تنظیم کند
+        webView.setInitialScale(0)
+    }
+
+    private fun forceDesktopViewport(webView: WebView) {
+        val js = """
+            (function(){
+              var head = document.head || document.getElementsByTagName('head')[0];
+              if(!head) return;
+              var m = document.querySelector('meta[name="viewport"]');
+              if(!m){ m=document.createElement('meta'); m.name='viewport'; head.appendChild(m); }
+              m.setAttribute('content','width=1200, initial-scale=1.0');
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
     }
 
     private fun captureViewport(webView: WebView): Bitmap {
@@ -385,13 +436,25 @@ class ShareToImageActivity : Activity() {
             isAntiAlias = true
         }
 
+        private var selectionEnabled = false
+
         private var startX = 0f
         private var startY = 0f
         private var endX = 0f
         private var endY = 0f
         private var dragging = false
 
+        fun setSelectionEnabled(enabled: Boolean) {
+            selectionEnabled = enabled
+        }
+
         override fun onTouchEvent(event: MotionEvent): Boolean {
+            // وقتی انتخاب خاموش است، event را مصرف نکن تا WebView اسکرول کند
+            if (!selectionEnabled) return false
+
+            // وقتی انتخاب روشن است، اجازه نده parent اسکرول را بدزدد
+            parent?.requestDisallowInterceptTouchEvent(true)
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     dragging = true
