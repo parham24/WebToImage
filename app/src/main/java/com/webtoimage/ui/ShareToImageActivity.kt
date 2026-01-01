@@ -38,6 +38,8 @@ class ShareToImageActivity : Activity() {
         }
 
         val prefs = getSharedPreferences("webtoimage", MODE_PRIVATE)
+
+        // پیش‌فرض دسکتاپ
         val desktopDefault = prefs.getBoolean("desktop_mode", true)
 
         val info = TextView(this).apply {
@@ -50,27 +52,44 @@ class ShareToImageActivity : Activity() {
             isChecked = desktopDefault
         }
 
-        val reloadBtn = Button(this).apply { text = "Reload" }
-        val clearSelBtn = Button(this).apply { text = "Clear" }
+        val reloadBtn = Button(this).apply { text = "RELOAD" }
+        val clearSelBtn = Button(this).apply { text = "CLEAR" }
 
         val saveImgBtn = Button(this).apply {
-            text = "Crop & Save (Image)"
+            text = "CROP & SAVE (IMAGE)"
             isEnabled = false
         }
 
         val savePdfBtn = Button(this).apply {
-            text = "Save PDF (Full Page)"
+            text = "SAVE PDF (FULL PAGE)"
             isEnabled = false
         }
 
-        val topBar = LinearLayout(this).apply {
+        // ردیف ۱: سوییچ + Reload
+        val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(24, 16, 24, 8)
-            addView(modeSwitch, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+            addView(
+                modeSwitch,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
             addView(reloadBtn)
+        }
+
+        // ردیف ۲: دکمه‌ها
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(24, 0, 24, 8)
             addView(clearSelBtn)
             addView(saveImgBtn)
             addView(savePdfBtn)
+        }
+
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(row1)
+            addView(row2)
         }
 
         val webView = WebView(this).apply {
@@ -121,7 +140,6 @@ class ShareToImageActivity : Activity() {
         currentLoad = sharedText.trim()
         isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
 
-        // Desktop/Mobile
         originalUa = webView.settings.userAgentString
         applyDesktopMode(webView, modeSwitch.isChecked)
 
@@ -145,7 +163,7 @@ class ShareToImageActivity : Activity() {
 
         clearSelBtn.setOnClickListener { overlay.clearSelection() }
 
-        // ذخیره عکس (فقط viewport) + crop انتخاب
+        // ذخیره تصویر (viewport) + crop
         saveImgBtn.setOnClickListener {
             try {
                 val full = captureViewport(webView)
@@ -236,7 +254,8 @@ class ShareToImageActivity : Activity() {
             baseUa
         }
 
-        settings.userAgentString = newUa
+        // کمک به اینکه سایت نسخه دسکتاپ بدهد
+        settings.userAgentString = newUa.replace("Mobile", "").trim()
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
     }
@@ -289,7 +308,10 @@ class ShareToImageActivity : Activity() {
                 contentResolver.openFileDescriptor(outUri, "w")?.fileDescriptor
                     ?.let { android.os.ParcelFileDescriptor.dup(it) }
             } else {
-                android.os.ParcelFileDescriptor.open(outFile, android.os.ParcelFileDescriptor.MODE_READ_WRITE)
+                android.os.ParcelFileDescriptor.open(
+                    outFile,
+                    android.os.ParcelFileDescriptor.MODE_READ_WRITE
+                )
             }
 
             if (pfd == null) {
@@ -331,13 +353,21 @@ class ShareToImageActivity : Activity() {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                 put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/WebToImage")
+                put(
+                    MediaStore.Downloads.RELATIVE_PATH,
+                    Environment.DIRECTORY_DOWNLOADS + "/WebToImage"
+                )
             }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            val uri = contentResolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values
+            )
             Pair(uri, null)
         } else {
-            // بدون permission هم کار کند: داخل پوشه اپ
-            val dir = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "WebToImage")
+            val dir = File(
+                getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                "WebToImage"
+            )
             if (!dir.exists()) dir.mkdirs()
             Pair(null, File(dir, fileName))
         }
