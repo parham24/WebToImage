@@ -28,9 +28,16 @@ class MainActivity : Activity() {
         }
 
         val btnFormat = Button(this).apply {
-            text = "Output format: " + AppPrefs.getFormat(this@MainActivity).uppercase()
+            text = formatButtonText()
             setOnClickListener {
-                showFormatDialog(this@MainActivity, this)
+                showFormatDialog(this@MainActivity) { text = formatButtonText() }
+            }
+        }
+
+        val btnQuality = Button(this).apply {
+            text = qualityButtonText()
+            setOnClickListener {
+                showQualityDialog(this@MainActivity) { text = qualityButtonText() }
             }
         }
 
@@ -39,12 +46,22 @@ class MainActivity : Activity() {
             addView(title)
             addView(btnLogs)
             addView(btnFormat)
+            addView(btnQuality)
         }
 
         setContentView(root)
     }
 
-    private fun showFormatDialog(ctx: android.content.Context, btn: Button) {
+    private fun formatButtonText(): String {
+        return "Output format: " + AppPrefs.getFormat(this).uppercase()
+    }
+
+    private fun qualityButtonText(): String {
+        val q = AppPrefs.getJpgQuality(this)
+        return "JPG quality: $q"
+    }
+
+    private fun showFormatDialog(ctx: android.content.Context, onChanged: () -> Unit) {
         val items = arrayOf("PNG (lossless)", "JPG (smaller)")
         val current = if (AppPrefs.getFormat(ctx) == "jpg") 1 else 0
 
@@ -53,7 +70,23 @@ class MainActivity : Activity() {
             .setSingleChoiceItems(items, current) { dialog, which ->
                 val v = if (which == 1) "jpg" else "png"
                 AppPrefs.setFormat(ctx, v)
-                btn.text = "Output format: " + v.uppercase()
+                onChanged()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showQualityDialog(ctx: android.content.Context, onChanged: () -> Unit) {
+        val qualities = intArrayOf(100, 95, 92, 90, 85, 80, 75, 70, 60, 50)
+        val labels = qualities.map { "$it" }.toTypedArray()
+        val currentQ = AppPrefs.getJpgQuality(ctx)
+        val currentIndex = qualities.indexOf(currentQ).let { if (it >= 0) it else 2 } // default 92
+
+        android.app.AlertDialog.Builder(ctx)
+            .setTitle("JPG quality (0-100)")
+            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
+                AppPrefs.setJpgQuality(ctx, qualities[which])
+                onChanged()
                 dialog.dismiss()
             }
             .show()
