@@ -8,11 +8,7 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.CancellationSignal
 import android.os.Environment
-import android.print.PageRange
-import android.print.PrintAttributes
-import android.print.PrintDocumentAdapter
 import android.provider.MediaStore
 import android.view.MotionEvent
 import android.view.View
@@ -25,6 +21,8 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import android.print.PrintAttributes
+import android.print.WebViewPdfSaver
 
 class ShareToImageActivity : Activity() {
 
@@ -35,7 +33,6 @@ class ShareToImageActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // بهتر است قبل از ساخت WebView صدا زده شود (برای draw کل سند). 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             WebView.enableSlowWholeDocumentDraw()
         }
@@ -124,7 +121,7 @@ class ShareToImageActivity : Activity() {
         currentLoad = sharedText.trim()
         isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
 
-        // تنظیم UA برای desktop/mobile (با تغییر userAgentString و تنظیمات viewport). 
+        // Desktop/Mobile
         originalUa = webView.settings.userAgentString
         applyDesktopMode(webView, modeSwitch.isChecked)
 
@@ -148,7 +145,7 @@ class ShareToImageActivity : Activity() {
 
         clearSelBtn.setOnClickListener { overlay.clearSelection() }
 
-        // ذخیره تصویر (فقط viewport) + crop انتخاب
+        // ذخیره عکس (فقط viewport) + crop انتخاب
         saveImgBtn.setOnClickListener {
             try {
                 val full = captureViewport(webView)
@@ -166,18 +163,18 @@ class ShareToImageActivity : Activity() {
 
                 info.text = "Saved image: $name"
             } catch (_: Throwable) {
-                // اگر خواستی Log هم اضافه می‌کنیم
             } finally {
                 finish()
             }
         }
 
-        // ذخیره PDF از کل صفحه (full page) با PrintDocumentAdapter
+        // ذخیره PDF کل صفحه
         savePdfBtn.setOnClickListener {
             info.text = "Generating PDF…"
             saveImgBtn.isEnabled = false
             savePdfBtn.isEnabled = false
-            createPdfFromWebView(webView) { ok, msg ->
+
+            createPdfFromWebView(webView) { msg ->
                 info.text = msg
                 finish()
             }
@@ -185,7 +182,6 @@ class ShareToImageActivity : Activity() {
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
-                // کاربرمحور: کاربر وقتی دید کامل شده دکمه‌ها را بزند؛ اینجا فقط دکمه‌ها را فعال می‌کنیم.
                 saveImgBtn.isEnabled = true
                 savePdfBtn.isEnabled = true
                 info.text = "Loaded. Drag to select area سپس Crop & Save، یا Save PDF برای کل صفحه."
@@ -229,7 +225,6 @@ class ShareToImageActivity : Activity() {
             return
         }
 
-        // روش رایج: جایگزینی بخش Android داخل پرانتز با دسکتاپ
         val newUa = try {
             val start = baseUa.indexOf("(")
             val end = baseUa.indexOf(")")
@@ -241,7 +236,6 @@ class ShareToImageActivity : Activity() {
             baseUa
         }
 
-        // WebSettings userAgentString + useWideViewPort/loadWithOverviewMode برای desktop-mode استفاده می‌شود. 
         settings.userAgentString = newUa
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
@@ -273,25 +267,16 @@ class ShareToImageActivity : Activity() {
         val w = (r - l).toInt().coerceAtLeast(1).coerceAtMost(src.width - x)
         val h = (b - t).toInt().coerceAtLeast(1).coerceAtMost(src.height - y)
 
-        // crop با Bitmap.createBitmap انجام می‌شود. 
         return Bitmap.createBitmap(src, x, y, w, h)
     }
 
-    private fun createPdfFromWebView(webView: WebView, done: (ok: Boolean, message: String) -> Unit) {
+    private fun createPdfFromWebView(webView: WebView, done: (message: String) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-            done(false, "PDF is not supported on this Android version.")
+            done("PDF is not supported on this Android version.")
             return
         }
 
-        // WebView.createPrintDocumentAdapter + PrintDocumentAdapter.onWrite خروجی PDF تولید می‌کند. 
         val jobName = "WebToImage_${System.currentTimeMillis()}"
-        val printAdapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            webView.createPrintDocumentAdapter(jobName)
-        } else {
-            @Suppress("DEPRECATION")
-            webView.createPrintDocumentAdapter()
-        }
-
         val attrs = PrintAttributes.Builder()
             .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
             .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
@@ -301,71 +286,41 @@ class ShareToImageActivity : Activity() {
 
         try {
             val pfd = if (outUri != null) {
-                contentResolver.openFileDescriptor(outUri, "w")
+                contentResolver.openFileDescriptor(outUri, "w")?.fileDescriptor
+                    ?.let { android.os.ParcelFileDescriptor.dup(it) }
             } else {
                 android.os.ParcelFileDescriptor.open(outFile, android.os.ParcelFileDescriptor.MODE_READ_WRITE)
             }
 
             if (pfd == null) {
-                done(false, "Cannot open output for PDF.")
+                done("Cannot open output for PDF.")
                 return
             }
 
-            printAdapter.onLayout(
-                null,
-                attrs,
-                null,
-                object : PrintDocumentAdapter.LayoutResultCallback() {
-                    override fun onLayoutFinished(info: android.print.PrintDocumentInfo, changed: Boolean) {
-                        printAdapter.onWrite(
-                            arrayOf(PageRange.ALL_PAGES),
-                            pfd,
-                            CancellationSignal(),
-                            object : PrintDocumentAdapter.WriteResultCallback() {
-                                override fun onWriteFinished(pages: Array<PageRange>) {
-                                    try {
-                                        pfd.close()
-                                    } catch (_: Throwable) {}
+            WebViewPdfSaver.writeWebViewToPdf(webView, jobName, attrs, pfd) { ok, err ->
+                try { pfd.close() } catch (_: Throwable) {}
 
-                                    if (outUri == null && outFile != null) {
-                                        // برای نمایش در فایل منیجر/گالری فایل‌ها (قدیمی‌ها)
-                                        MediaScannerConnection.scanFile(
-                                            this@ShareToImageActivity,
-                                            arrayOf(outFile.absolutePath),
-                                            arrayOf("application/pdf"),
-                                            null
-                                        )
-                                    }
+                if (!ok) {
+                    done("PDF failed: ${err ?: "unknown"}")
+                    return@writeWebViewToPdf
+                }
 
-                                    val msg = if (outUri != null) {
-                                        "Saved PDF in Downloads/WebToImage"
-                                    } else {
-                                        "Saved PDF: ${outFile?.absolutePath ?: ""}"
-                                    }
-                                    done(true, msg)
-                                }
+                if (outUri == null && outFile != null) {
+                    MediaScannerConnection.scanFile(
+                        this,
+                        arrayOf(outFile.absolutePath),
+                        arrayOf("application/pdf"),
+                        null
+                    )
+                }
 
-                                override fun onWriteFailed(error: CharSequence?) {
-                                    try {
-                                        pfd.close()
-                                    } catch (_: Throwable) {}
-                                    done(false, "PDF write failed: ${error ?: "unknown"}")
-                                }
-                            }
-                        )
-                    }
-
-                    override fun onLayoutFailed(error: CharSequence?) {
-                        try {
-                            pfd.close()
-                        } catch (_: Throwable) {}
-                        done(false, "PDF layout failed: ${error ?: "unknown"}")
-                    }
-                },
-                null
-            )
+                done(
+                    if (outUri != null) "Saved PDF in Downloads/WebToImage"
+                    else "Saved PDF: ${outFile?.absolutePath ?: ""}"
+                )
+            }
         } catch (t: Throwable) {
-            done(false, "PDF error: ${t.message ?: "unknown"}")
+            done("PDF error: ${t.message ?: "unknown"}")
         }
     }
 
@@ -381,22 +336,18 @@ class ShareToImageActivity : Activity() {
             val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             Pair(uri, null)
         } else {
-            val dir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "WebToImage"
-            )
+            // بدون permission هم کار کند: داخل پوشه اپ
+            val dir = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "WebToImage")
             if (!dir.exists()) dir.mkdirs()
             Pair(null, File(dir, fileName))
         }
     }
 
     private class SelectionOverlayView(context: Activity) : View(context) {
-
         private val shadePaint = Paint().apply {
             color = 0x66000000
             style = Paint.Style.FILL
         }
-
         private val borderPaint = Paint().apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
@@ -421,7 +372,6 @@ class ShareToImageActivity : Activity() {
                     invalidate()
                     return true
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     if (!dragging) return false
                     endX = event.x
@@ -429,7 +379,6 @@ class ShareToImageActivity : Activity() {
                     invalidate()
                     return true
                 }
-
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     dragging = false
                     endX = event.x
@@ -445,13 +394,11 @@ class ShareToImageActivity : Activity() {
             super.onDraw(canvas)
             val rect = getSelectionRect() ?: return
 
-            // رسم overlay طبق اصول custom drawing (سایه + کادر). 
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shadePaint)
 
             val clearPaint = Paint().apply {
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
             }
-
             val saved = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
             canvas.drawRect(rect, clearPaint)
             canvas.restoreToCount(saved)
@@ -466,7 +413,6 @@ class ShareToImageActivity : Activity() {
 
         fun getSelectionRect(): RectF? {
             if (abs(endX - startX) < 20f || abs(endY - startY) < 20f) return null
-
             val l = min(startX, endX).coerceIn(0f, width.toFloat())
             val t = min(startY, endY).coerceIn(0f, height.toFloat())
             val r = max(startX, endX).coerceIn(0f, width.toFloat())
