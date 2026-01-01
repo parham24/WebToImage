@@ -2,12 +2,17 @@ package com.webtoimage
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.webtoimage.ui.LogActivity
+import com.webtoimage.util.AppLog
 import com.webtoimage.util.AppPrefs
+import com.webtoimage.util.GallerySaver
 
 class MainActivity : Activity() {
 
@@ -41,12 +46,29 @@ class MainActivity : Activity() {
             }
         }
 
+        val btnTestSave = Button(this).apply {
+            text = "Save test image to Gallery"
+            setOnClickListener {
+                val bmp = Bitmap.createBitmap(900, 500, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+                canvas.drawColor(Color.WHITE)
+                // یک متن ساده با رنگ متفاوت (بدون Paint هم یک تست ساده داریم)
+                canvas.drawColor(Color.rgb(245, 245, 245))
+
+                val fileName = GallerySaver.saveToGallery(this@MainActivity, bmp, "test")
+                bmp.recycle()
+
+                AppLog.i(this@MainActivity, "Saved to Gallery: $fileName")
+            }
+        }
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(title)
             addView(btnLogs)
             addView(btnFormat)
             addView(btnQuality)
+            addView(btnTestSave)
         }
 
         setContentView(root)
