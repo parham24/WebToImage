@@ -3,7 +3,6 @@ package com.webtoimage.print
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.print.PrintAttributes
 import android.print.PrinterCapabilitiesInfo
@@ -13,12 +12,10 @@ import android.printservice.PrintJob
 import android.printservice.PrintService
 import android.printservice.PrinterDiscoverySession
 import com.webtoimage.util.AppLog
+import com.webtoimage.util.GallerySaver
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class WebToImagePrintService : PrintService() {
 
@@ -66,6 +63,11 @@ class WebToImagePrintService : PrintService() {
     }
 
     override fun onPrintJobQueued(printJob: PrintJob) {
+        AppLog.i(
+            this,
+            "onPrintJobQueued id=${printJob.id} queued=${printJob.isQueued} started=${printJob.isStarted}"
+        )
+
         val pfd = printJob.document?.data
         if (pfd == null) {
             AppLog.e(this, "PrintJob document/data is null")
@@ -73,49 +75,44 @@ class WebToImagePrintService : PrintService() {
             return
         }
 
-        printJob.start()
+        val started = printJob.start()
+        AppLog.i(this, "printJob.start() = $started")
 
         Thread {
             try {
-                val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-
-                // جای ذخیره خروجی (بدون مجوز، داخل فضای اختصاصی اپ روی حافظه خارجی)
-                val outDir = File(
-                    getExternalFilesDir(Environment.DIRECTORY_PICTURES),
-                    "WebToImage/$ts"
-                ).apply { mkdirs() }
-
                 val renderer = openPdfRendererSafely(pfd)
                 renderer.use { pdf ->
                     val pageCount = pdf.pageCount
-                    AppLog.i(this, "PDF pages=$pageCount outDir=${outDir.absolutePath}")
+                    AppLog.i(this, "PDF pages=$pageCount")
 
-                    val scale = 2f // کیفیت: 2 خوبه، 3 خیلی باکیفیت ولی سنگین
+                    val scale = 2f
                     for (i in 0 until pageCount) {
                         val page = pdf.openPage(i)
                         try {
                             val width = (page.width * scale).toInt()
                             val height = (page.height * scale).toInt()
+
                             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
                             val matrix = Matrix().apply { setScale(scale, scale) }
                             page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
 
-                            val outFile = File(outDir, "page_${i + 1}.png")
-                            FileOutputStream(outFile).use { fos ->
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)
-                            }
-                            bitmap.recycle()
+                            val name = GallerySaver.saveToGallery(
+                                this@WebToImagePrintService,
+                                bitmap,
+                                "print_page_${i + 1}"
+                            )
+                            AppLog.i(this, "Saved to Gallery: $name")
 
-                            AppLog.i(this, "Saved ${outFile.absolutePath}")
+                            bitmap.recycle()
                         } finally {
                             page.close()
                         }
                     }
                 }
 
-                printJob.complete()
-                AppLog.i(this, "Job completed OK")
+                val completed = printJob.complete()
+                AppLog.i(this, "printJob.complete() = $completed")
             } catch (t: Throwable) {
                 AppLog.e(this, "Convert PDF->Image failed", t)
                 runCatching { printJob.fail(t.message ?: "Convert failed") }
@@ -127,10 +124,9 @@ class WebToImagePrintService : PrintService() {
 
     private fun openPdfRendererSafely(pfd: ParcelFileDescriptor): PdfRenderer {
         return try {
-            // اگر seekable باشد همین کار می‌کند
             PdfRenderer(pfd)
         } catch (e: IllegalArgumentException) {
-            // اگر seekable نبود، اول به فایل موقت کپی می‌کنیم
+            // اگر PFD seekable نبود، اول PDF را در cache کپی می‌کنیم. [web:621]
             AppLog.e(this, "PFD not seekable; copying to cache", e)
 
             val tmp = File(cacheDir, "printjob_${System.currentTimeMillis()}.pdf")
