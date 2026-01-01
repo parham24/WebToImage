@@ -25,6 +25,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.webtoimage.util.GallerySaver
 import java.io.File
 import kotlin.math.abs
@@ -37,8 +39,9 @@ class ShareToImageActivity : Activity() {
     private var currentLoad: String? = null
     private var isUrl: Boolean = false
 
-    // برای viewport injection فقط یک بار (اگر لازم شد)
+    // fallback اگر DocumentStartScript پشتیبانی نشد
     private var injectedOnce = false
+    private var docStartScriptInstalled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -123,6 +126,9 @@ class ShareToImageActivity : Activity() {
             settings.javaScriptEnabled = true
             setBackgroundColor(Color.WHITE)
         }
+
+        // تزریق viewport از Document Start (برای مشکل GitHub و سایت‌هایی که viewport موبایل می‌گذارند)
+        docStartScriptInstalled = installDesktopViewportDocStartScript(webView)
 
         // JS console logs => Logcat
         webView.webChromeClient = object : WebChromeClient() {
@@ -285,8 +291,8 @@ class ShareToImageActivity : Activity() {
                     Log.d("W2I/Viewport", v ?: "null")
                 }
 
-                // اگر desktop روشن است، یک بار viewport را هم (در صورت نیاز) اجبار کن و reload کن
-                if (modeSwitch.isChecked && !injectedOnce) {
+                // fallback فقط اگر DocumentStartScript نداریم
+                if (modeSwitch.isChecked && !docStartScriptInstalled && !injectedOnce) {
                     injectedOnce = true
                     forceDesktopViewport(view)
                     view.reload()
@@ -299,6 +305,42 @@ class ShareToImageActivity : Activity() {
         }
 
         reloadCurrent(webView)
+    }
+
+    private fun installDesktopViewportDocStartScript(webView: WebView): Boolean {
+        return try {
+            if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
+
+            // مهم: Script فقط وقتی UA دسکتاپ باشد اعمال می‌شود (پس با خاموش کردن Desktop mode، خودکار غیرفعال می‌شود)
+            val script = """
+                (function(){
+                  try{
+                    var ua = navigator.userAgent || "";
+                    if (ua.indexOf("Windows NT") === -1) return;
+
+                    function applyVp(){
+                      var head = document.head || document.getElementsByTagName('head')[0];
+                      if(!head) return;
+                      var m = document.querySelector('meta[name="viewport"]');
+                      if(!m){ m=document.createElement('meta'); m.name='viewport'; head.appendChild(m); }
+                      m.setAttribute('content','width=1200, initial-scale=1.0');
+                    }
+
+                    applyVp();
+                    var t=setInterval(applyVp,50);
+                    setTimeout(function(){ try{clearInterval(t);}catch(e){} }, 2000);
+                  }catch(e){}
+                })();
+            """.trimIndent()
+
+            // برای همه originها (اگر روی دستگاهی validate سخت‌گیرانه بود، try/catch جلوی کرش را می‌گیرد)
+            val rules = setOf("*")
+
+            WebViewCompat.addDocumentStartJavaScript(webView, script, rules)
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun reloadCurrent(webView: WebView) {
@@ -334,7 +376,6 @@ class ShareToImageActivity : Activity() {
             return
         }
 
-        // UA دسکتاپ ثابت
         val desktopUA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -348,7 +389,6 @@ class ShareToImageActivity : Activity() {
 
         s.domStorageEnabled = true
 
-        // اجازه بده WebView خودش scale مناسب را تنظیم کند
         webView.setInitialScale(0)
     }
 
@@ -424,10 +464,7 @@ class ShareToImageActivity : Activity() {
             }
 
             WebViewPdfSaver.writeWebViewToPdf(webView, jobName, attrs, pfd) { ok, err ->
-                try {
-                    pfd.close()
-                } catch (_: Throwable) {
-                }
+                try { pfd.close() } catch (_: Throwable) {}
 
                 if (!ok) {
                     done("PDF failed: ${err ?: "unknown"}")
@@ -505,10 +542,7 @@ class ShareToImageActivity : Activity() {
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            // وقتی انتخاب خاموش است، event را مصرف نکن تا WebView اسکرول کند
             if (!selectionEnabled) return false
-
-            // وقتی انتخاب روشن است، اجازه نده parent اسکرول را بدزدد
             parent?.requestDisallowInterceptTouchEvent(true)
 
             when (event.actionMasked) {
@@ -565,7 +599,7 @@ class ShareToImageActivity : Activity() {
             val l = min(startX, endX).coerceIn(0f, width.toFloat())
             val t = min(startY, endY).coerceIn(0f, height.toFloat())
             val r = max(startX, endX).coerceIn(0f, width.toFloat())
-            val b = max(startY, endY).coerceIn(0f, height.toFloat())
+            val b = max(startY, endY).coerceIn(0f, width.toFloat())
             return RectF(l, t, r, b)
         }
     }
