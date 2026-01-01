@@ -18,7 +18,7 @@
 
         <!-- Share target -->
         <activity
-            android:name=".ui.ShareEntryActivity"
+            android:name=".ui.ShareToImageActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
