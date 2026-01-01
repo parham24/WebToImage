@@ -3,16 +3,25 @@ package com.webtoimage.ui
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.*
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.print.PrintAttributes
+import android.print.WebViewPdfSaver
 import android.provider.MediaStore
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
@@ -21,8 +30,6 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import android.print.PrintAttributes
-import android.print.WebViewPdfSaver
 
 class ShareToImageActivity : Activity() {
 
@@ -35,6 +42,12 @@ class ShareToImageActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Remote Debug (chrome://inspect) فقط در build دیباگ
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (debuggable) WebView.setWebContentsDebuggingEnabled(true)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             WebView.enableSlowWholeDocumentDraw()
@@ -109,6 +122,17 @@ class ShareToImageActivity : Activity() {
             )
             settings.javaScriptEnabled = true
             setBackgroundColor(Color.WHITE)
+        }
+
+        // JS console logs => Logcat
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(cm: ConsoleMessage): Boolean {
+                Log.d(
+                    "W2I/Console",
+                    "${cm.message()} -- line ${cm.lineNumber()} @ ${cm.sourceId()} [${cm.messageLevel()}]"
+                )
+                return true
+            }
         }
 
         val overlay = SelectionOverlayView(this).apply {
@@ -227,9 +251,39 @@ class ShareToImageActivity : Activity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError
+            ) {
+                Log.e(
+                    "W2I/WebError",
+                    "url=${request.url} main=${request.isForMainFrame} code=${error.errorCode} desc=${error.description}"
+                )
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse
+            ) {
+                Log.e(
+                    "W2I/HttpError",
+                    "url=${request.url} main=${request.isForMainFrame} status=${errorResponse.statusCode}"
+                )
+            }
+
             override fun onPageFinished(view: WebView, url: String) {
                 saveImgBtn.isEnabled = true
                 savePdfBtn.isEnabled = true
+
+                // لاگ viewport/UA برای تشخیص موبایل/دسکتاپ
+                view.evaluateJavascript(
+                    "(function(){return JSON.stringify({ua:navigator.userAgent,w:window.innerWidth,dpr:window.devicePixelRatio,viewport:(document.querySelector('meta[name=viewport]')||{}).content});})();"
+                ) { v ->
+                    Log.d("W2I/Viewport", v ?: "null")
+                }
 
                 // اگر desktop روشن است، یک بار viewport را هم (در صورت نیاز) اجبار کن و reload کن
                 if (modeSwitch.isChecked && !injectedOnce) {
@@ -339,8 +393,7 @@ class ShareToImageActivity : Activity() {
 
         return Bitmap.createBitmap(src, x, y, w, h)
     }
-
-    private fun createPdfFromWebView(webView: WebView, done: (message: String) -> Unit) {
+        private fun createPdfFromWebView(webView: WebView, done: (message: String) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
             done("PDF is not supported on this Android version.")
             return
@@ -371,7 +424,10 @@ class ShareToImageActivity : Activity() {
             }
 
             WebViewPdfSaver.writeWebViewToPdf(webView, jobName, attrs, pfd) { ok, err ->
-                try { pfd.close() } catch (_: Throwable) {}
+                try {
+                    pfd.close()
+                } catch (_: Throwable) {
+                }
 
                 if (!ok) {
                     done("PDF failed: ${err ?: "unknown"}")
