@@ -33,6 +33,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import android.os.Handler
+import android.os.Looper
 
 class ShareToImageActivity : Activity() {
 
@@ -221,9 +223,8 @@ class ShareToImageActivity : Activity() {
             overlay.clearSelection()
             webView.reload()
         }
-
-        // ذخیره تصویر (viewport) + crop
-        saveImgBtn.setOnClickListener {
+// ذخیره تصویر (viewport) + crop
+saveImgBtn.setOnClickListener {
     try {
         val full = captureViewport(webView)
         val cropRect = overlay.getSelectionRect()
@@ -239,22 +240,15 @@ class ShareToImageActivity : Activity() {
         full.recycle()
 
         info.text = "Saved image: $name"
-        // finish()  <-- اگر خواستی فقط اینجا (بعد از موفقیت) بزن، نه finally
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            finish()
+        }, 600)
+
     } catch (_: Throwable) {
         info.text = "Save failed"
     }
-        }
-
-                val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
-                if (outBitmap !== full) outBitmap.recycle()
-                full.recycle()
-
-                info.text = "Saved image: $name"
-            } catch (_: Throwable) {
-            } finally {
-                finish()
-            }
-        }
+}
 
         // ذخیره PDF کل صفحه
         savePdfBtn.setOnClickListener {
