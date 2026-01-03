@@ -183,7 +183,8 @@ class ShareToImageActivity : AppCompatActivity() {
         }
 
         // دریافت متن Share شده
-        val incoming: String? = when (intent?.action) {
+        // دریافت ورودی از Chrome/Share
+val incoming: String? = when (intent?.action) {
 
     Intent.ACTION_VIEW -> {
         intent.dataString
@@ -201,7 +202,8 @@ class ShareToImageActivity : AppCompatActivity() {
 }
 
 if (incoming.isNullOrBlank()) {
-    Toast.makeText(this, "Nothing received from Share", Toast.LENGTH_LONG).show()
+    Toast.makeText(this, "Nothing received from Chrome Share", Toast.LENGTH_LONG).show()
+    // فعلاً finish نکن تا ببینی Activity باز شده
     return
 }
 
