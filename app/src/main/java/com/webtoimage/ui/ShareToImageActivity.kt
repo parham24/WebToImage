@@ -1,7 +1,6 @@
 package com.webtoimage.ui
 
 import com.webtoimage.R
-import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -62,6 +61,54 @@ class ShareToImageActivity : AppCompatActivity() {
     private var menuDesktopId = 2
     private var menuPdfId = 3
 
+    // استخراج لینک از متن Share (گاهی Chrome عنوان + لینک می‌فرسته)
+    private val URL_REGEX = Regex("""(?i)\b((https?://|www.)S+)\b""")
+
+    private fun readIncomingText(intent: Intent?): String? {
+        if (intent == null) return null
+        return when (intent.action) {
+            Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_SEND -> {
+                val t1 = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+                val t2 = intent.clipData?.let { cd ->
+                    if (cd.itemCount > 0) cd.getItemAt(0).coerceToText(this)?.toString() else null
+                }
+                t1 ?: t2
+            }
+            else -> null
+        }
+    }
+
+    private fun normalizeIncomingToUrl(raw: String): String? {
+        var s = raw.trim()
+        if (s.isEmpty()) return null
+
+        // اگر متن ترکیبی بود، لینک را از داخلش بیرون بکش
+        s = (URL_REGEX.find(s)?.value ?: s.lineSequence().firstOrNull { it.isNotBlank() }?.trim()).orEmpty()
+        if (s.isEmpty()) return null
+
+        // حذف علائم رایج انتهای لینک
+        s = s.trimEnd(')', ']', '}', '.', ',', ';')
+
+        // اگر www.www بود درستش کن (چه اول رشته چه بعد از scheme)
+        s = s.replace(Regex("(?i)www\\.www\\."), "www.")
+        s = s.replace("://www.www.", "://www.")
+
+        // اگر scheme ندارد، فقط https اضافه کن (www اضافه نکن)
+        val hasScheme = s.startsWith("http://", true) || s.startsWith("https://", true)
+        if (!hasScheme) {
+            // اگر شبیه دامنه است (post.ir یا www.post.ir یا post.ir/...)
+            val looksLikeDomain = s.matches(Regex("""(?i)^[a-z0-9.-]+.[a-z]{2,}(/.*)?$"""))
+            if (looksLikeDomain) {
+                s = "https://$s"
+            } else {
+                return null
+            }
+        }
+
+        return s
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -99,7 +146,7 @@ class ShareToImageActivity : AppCompatActivity() {
         originalUa = webView.settings.userAgentString
         applyDesktopMode(webView, desktopMode)
 
-        // تزریق viewport از Document Start (برای مشکل GitHub و سایت‌هایی که viewport موبایل می‌گذارند)
+        // تزریق viewport از Document Start
         docStartScriptInstalled = installDesktopViewportDocStartScript(webView)
 
         // JS console logs => Logcat
@@ -121,17 +168,18 @@ class ShareToImageActivity : AppCompatActivity() {
         fabCrop.isEnabled = false
 
         fabSelect.setOnClickListener {
-    selectOn = !selectOn
-    overlay.clearSelection()
-    overlay.setSelectionEnabled(selectOn)
-    overlay.visibility = if (selectOn) View.VISIBLE else View.GONE
+            selectOn = !selectOn
+            overlay.clearSelection()
+            overlay.setSelectionEnabled(selectOn)
+            overlay.visibility = if (selectOn) View.VISIBLE else View.GONE
 
-    if (selectOn) {
-        overlay.bringToFront()
-        overlay.requestFocus()
-        Toast.makeText(this, "Drag روی صفحه برای انتخاب کادر", Toast.LENGTH_SHORT).show()
-    }
+            if (selectOn) {
+                overlay.bringToFront()
+                overlay.requestFocus()
+                Toast.makeText(this, "Drag روی صفحه برای انتخاب کادر", Toast.LENGTH_SHORT).show()
+            }
         }
+
         fabClear.setOnClickListener {
             overlay.clearSelection()
         }
@@ -182,34 +230,30 @@ class ShareToImageActivity : AppCompatActivity() {
             }
         }
 
-        // دریافت متن Share شده
         // ---- دریافت ورودی از Share/Chrome (SEND و VIEW) ----
-val incoming: String? = when (intent?.action) {
+        val incoming = readIncomingText(intent)
 
-    Intent.ACTION_VIEW -> {
-        intent.dataString
-    }
+        Log.d(
+            "W2I/Intent",
+            "action=${intent?.action} type=${intent?.type} data=${intent?.dataString} hasExtraText=${intent?.hasExtra(Intent.EXTRA_TEXT)} clipItems=${intent?.clipData?.itemCount}"
+        )
 
-    Intent.ACTION_SEND -> {
-        val t1 = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-        val t2 = intent.clipData?.let { cd ->
-            if (cd.itemCount > 0) cd.getItemAt(0).coerceToText(this)?.toString() else null
+        if (incoming.isNullOrBlank()) {
+            Toast.makeText(this, "Nothing received from Chrome Share", Toast.LENGTH_LONG).show()
+            return
         }
-        t1 ?: t2
-    }
 
-    else -> null
-}
+        val normalizedUrl = normalizeIncomingToUrl(incoming)
 
-Log.d("W2I/Intent", "action=${intent?.action} type=${intent?.type} data=${intent?.dataString} hasExtraText=${intent?.hasExtra(Intent.EXTRA_TEXT)} clipItems=${intent?.clipData?.itemCount}")
+        if (normalizedUrl != null) {
+            currentLoad = normalizedUrl
+            isUrl = true
+        } else {
+            // اگر لینک نبود، مثل قبل متن را نشان بده
+            currentLoad = incoming.trim()
+            isUrl = false
+        }
 
-if (incoming.isNullOrBlank()) {
-    Toast.makeText(this, "Nothing received from Chrome Share", Toast.LENGTH_LONG).show()
-    return   // مهم: finish نکن، تا صفحه سفید و بسته‌شدن نداشته باشی
-}
-
-currentLoad = incoming.trim()
-isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
         webView.webViewClient = object : WebViewClient() {
 
             override fun onReceivedError(
@@ -266,7 +310,7 @@ isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https:/
         itemDesktop.isCheckable = true
         itemDesktop.isChecked = desktopMode
 
-        val itemReload = m.add(0, menuReloadId, 1, "Reload")
+        m.add(0, menuReloadId, 1, "Reload")
 
         val itemPdf = m.add(0, menuPdfId, 2, "Save PDF")
         itemPdf.isEnabled = false
