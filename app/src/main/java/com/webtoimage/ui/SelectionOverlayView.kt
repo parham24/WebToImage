@@ -14,10 +14,15 @@ class SelectionOverlayView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
+
     private val shadePaint = Paint().apply {
         color = 0x66000000
         style = Paint.Style.FILL
     }
+
     private val borderPaint = Paint().apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
@@ -26,6 +31,7 @@ class SelectionOverlayView @JvmOverloads constructor(
     }
 
     private var selectionEnabled = false
+
     private var startX = 0f
     private var startY = 0f
     private var endX = 0f
@@ -50,6 +56,7 @@ class SelectionOverlayView @JvmOverloads constructor(
                 invalidate()
                 return true
             }
+
             MotionEvent.ACTION_MOVE -> {
                 if (!dragging) return false
                 endX = event.x
@@ -57,6 +64,7 @@ class SelectionOverlayView @JvmOverloads constructor(
                 invalidate()
                 return true
             }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 endX = event.x
@@ -70,29 +78,41 @@ class SelectionOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
         val rect = getSelectionRect() ?: return
 
+        // کل صفحه را سایه می‌زنیم
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shadePaint)
 
-        val clearPaint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
+        // وسط کادر را "خالی" می‌کنیم
+        val clearPaint = Paint().apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        }
+
         val saved = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
         canvas.drawRect(rect, clearPaint)
         canvas.restoreToCount(saved)
 
+        // دور کادر
         canvas.drawRect(rect, borderPaint)
     }
 
     fun clearSelection() {
-        startX = 0f; startY = 0f; endX = 0f; endY = 0f
+        startX = 0f
+        startY = 0f
+        endX = 0f
+        endY = 0f
         invalidate()
     }
 
     fun getSelectionRect(): RectF? {
         if (abs(endX - startX) < 20f || abs(endY - startY) < 20f) return null
+
         val l = min(startX, endX).coerceIn(0f, width.toFloat())
         val t = min(startY, endY).coerceIn(0f, height.toFloat())
         val r = max(startX, endX).coerceIn(0f, width.toFloat())
-        val b = max(startY, endY).coerceIn(0f, height.toFloat()) // مهم: height (نه width)
+        val b = max(startY, endY).coerceIn(0f, height.toFloat())
+
         return RectF(l, t, r, b)
     }
 }
