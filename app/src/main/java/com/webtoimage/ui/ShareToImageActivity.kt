@@ -10,13 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.print.PrintAttributes
 import android.print.WebViewPdfSaver
 import android.provider.MediaStore
 import android.util.Log
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -24,20 +24,19 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.*
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.webtoimage.util.GallerySaver
-import java.io.File
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import android.os.Handler
-import android.os.Looper
-import android.graphics.RectF
 
-class ShareToImageActivity : Activity() {
+class ShareToImageActivity : AppCompatActivity() {
 
     private var originalUa: String? = null
     private var currentLoad: String? = null
@@ -46,6 +45,21 @@ class ShareToImageActivity : Activity() {
     // fallback اگر DocumentStartScript پشتیبانی نشد
     private var injectedOnce = false
     private var docStartScriptInstalled = false
+
+    private var desktopMode = true
+    private var selectOn = false
+
+    private lateinit var toolbar: MaterialToolbar
+    private lateinit var webView: WebView
+    private lateinit var overlay: SelectionOverlayView
+    private lateinit var fabCrop: ExtendedFloatingActionButton
+    private lateinit var fabSelect: FloatingActionButton
+    private lateinit var fabClear: FloatingActionButton
+
+    // آیتم‌های منو (برنامه‌نویسی)
+    private var menuReloadId = 1
+    private var menuDesktopId = 2
+    private var menuPdfId = 3
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,76 +74,29 @@ class ShareToImageActivity : Activity() {
             WebView.enableSlowWholeDocumentDraw()
         }
 
+        // UI از XML
+        setContentView(R.layout.activity_share_to_image)
+
+        toolbar = findViewById(R.id.toolbar)
+        webView = findViewById(R.id.webView)
+        overlay = findViewById(R.id.overlay)
+        fabCrop = findViewById(R.id.fabCrop)
+        fabSelect = findViewById(R.id.fabSelect)
+        fabClear = findViewById(R.id.fabClear)
+
+        setSupportActionBar(toolbar)
+
         val prefs = getSharedPreferences("webtoimage", MODE_PRIVATE)
+        desktopMode = prefs.getBoolean("desktop_mode", true)
 
-        // پیش‌فرض دسکتاپ
-        val desktopDefault = prefs.getBoolean("desktop_mode", true)
+        setupToolbarMenu(prefs)
 
-        val info = TextView(this).apply {
-            text = "Loading…"
-            setPadding(24, 16, 24, 16)
-        }
+        // WebView settings
+        webView.settings.javaScriptEnabled = true
+        webView.setBackgroundColor(Color.WHITE)
 
-        val modeSwitch = Switch(this).apply {
-            text = "Desktop mode"
-            isChecked = desktopDefault
-        }
-
-        val reloadBtn = Button(this).apply { text = "RELOAD" }
-        val clearSelBtn = Button(this).apply { text = "CLEAR" }
-
-        val selectToggle = ToggleButton(this).apply {
-            textOn = "SELECT: ON"
-            textOff = "SELECT: OFF"
-            isChecked = false
-        }
-
-        val saveImgBtn = Button(this).apply {
-            text = "CROP & SAVE (IMAGE)"
-            isEnabled = false
-        }
-
-        val savePdfBtn = Button(this).apply {
-            text = "SAVE PDF (FULL PAGE)"
-            isEnabled = false
-        }
-
-        // ردیف ۱: سوییچ + Reload
-        val row1 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(24, 16, 24, 8)
-
-            addView(
-                modeSwitch,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            )
-            addView(reloadBtn)
-        }
-
-        // ردیف ۲: دکمه‌ها + انتخاب
-        val row2 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(24, 0, 24, 8)
-            addView(selectToggle)
-            addView(clearSelBtn)
-            addView(saveImgBtn)
-            addView(savePdfBtn)
-        }
-
-        val topBar = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(row1)
-            addView(row2)
-        }
-
-        val webView = WebView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            settings.javaScriptEnabled = true
-            setBackgroundColor(Color.WHITE)
-        }
+        originalUa = webView.settings.userAgentString
+        applyDesktopMode(webView, desktopMode)
 
         // تزریق viewport از Document Start (برای مشکل GitHub و سایت‌هایی که viewport موبایل می‌گذارند)
         docStartScriptInstalled = installDesktopViewportDocStartScript(webView)
@@ -145,33 +112,69 @@ class ShareToImageActivity : Activity() {
             }
         }
 
-        val overlay = SelectionOverlayView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            // خیلی مهم: پیش‌فرض خاموش تا اسکرول WebView کار کند
-            visibility = View.GONE
-            setSelectionEnabled(false)
+        // Overlay: پیش‌فرض خاموش تا اسکرول WebView کار کند
+        overlay.visibility = View.GONE
+        overlay.setSelectionEnabled(false)
+
+        // دکمه‌ها
+        fabCrop.isEnabled = false
+
+        fabSelect.setOnClickListener {
+            selectOn = !selectOn
+            overlay.clearSelection()
+            overlay.setSelectionEnabled(selectOn)
+            overlay.visibility = if (selectOn) View.VISIBLE else View.GONE
         }
 
-        val webContainer = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-            addView(webView)
-            addView(overlay)
+        fabClear.setOnClickListener {
+            overlay.clearSelection()
         }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(topBar)
-            addView(info)
-            addView(webContainer)
+        // ذخیره تصویر (viewport) + crop
+        fabCrop.setOnClickListener {
+            try {
+                val full = captureViewport(webView)
+
+                // Rect را فریز کن که در لحظه‌ی redraw تغییر نکند
+                val cropRect = overlay.getSelectionRect()?.let { RectF(it) }
+
+                val outBitmap = if (cropRect != null) {
+                    // تبدیل Rect از مختصات overlay به مختصات webView
+                    val overlayLoc = IntArray(2)
+                    val webLoc = IntArray(2)
+                    overlay.getLocationOnScreen(overlayLoc)
+                    webView.getLocationOnScreen(webLoc)
+
+                    val rectWeb = RectF(cropRect)
+                    rectWeb.offset(
+                        (overlayLoc[0] - webLoc[0]).toFloat(),
+                        (overlayLoc[1] - webLoc[1]).toFloat()
+                    )
+
+                    rectWeb.left = rectWeb.left.coerceIn(0f, webView.width.toFloat())
+                    rectWeb.right = rectWeb.right.coerceIn(0f, webView.width.toFloat())
+                    rectWeb.top = rectWeb.top.coerceIn(0f, webView.height.toFloat())
+                    rectWeb.bottom = rectWeb.bottom.coerceIn(0f, webView.height.toFloat())
+
+                    cropFromViewport(full, rectWeb, webView.width, webView.height)
+                } else {
+                    full
+                }
+
+                val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
+                if (outBitmap !== full) outBitmap.recycle()
+                full.recycle()
+
+                Toast.makeText(this, "Saved image: $name", Toast.LENGTH_SHORT).show()
+
+                Handler(Looper.getMainLooper()).postDelayed({
+                    finish()
+                }, 600)
+
+            } catch (_: Throwable) {
+                Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            }
         }
-        setContentView(root)
 
         // دریافت متن Share شده
         val sharedText = if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
@@ -179,105 +182,13 @@ class ShareToImageActivity : Activity() {
         } else null
 
         if (sharedText.isNullOrBlank()) {
-            info.text = "No shared text received."
+            Toast.makeText(this, "No shared text received.", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
         currentLoad = sharedText.trim()
         isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
-
-        originalUa = webView.settings.userAgentString
-        applyDesktopMode(webView, modeSwitch.isChecked)
-
-        // SELECT toggle: روشن = اجازه انتخاب کادر، خاموش = اسکرول آزاد
-        selectToggle.setOnCheckedChangeListener { _, on ->
-            overlay.clearSelection()
-            overlay.setSelectionEnabled(on)
-            overlay.visibility = if (on) View.VISIBLE else View.GONE
-        }
-
-        clearSelBtn.setOnClickListener { overlay.clearSelection() }
-
-        modeSwitch.setOnCheckedChangeListener { _, checked ->
-            prefs.edit().putBoolean("desktop_mode", checked).apply()
-            injectedOnce = false
-
-            applyDesktopMode(webView, checked)
-
-            // کمک به اینکه نتیجه قبلی cache نشود
-            webView.clearCache(true)
-            webView.clearHistory()
-
-            info.text = "Reloading…"
-            saveImgBtn.isEnabled = false
-            savePdfBtn.isEnabled = false
-            overlay.clearSelection()
-            reloadCurrent(webView)
-        }
-
-        reloadBtn.setOnClickListener {
-            injectedOnce = false
-            info.text = "Reloading…"
-            saveImgBtn.isEnabled = false
-            savePdfBtn.isEnabled = false
-            overlay.clearSelection()
-            webView.reload()
-        }
-// ذخیره تصویر (viewport) + crop
-saveImgBtn.setOnClickListener {
-    try {
-        val full = captureViewport(webView)
-        val cropRect = overlay.getSelectionRect()
-
-val outBitmap = if (cropRect != null) {
-    val overlayLoc = IntArray(2)
-    val webLoc = IntArray(2)
-    overlay.getLocationOnScreen(overlayLoc)
-    webView.getLocationOnScreen(webLoc)
-
-    val rectWeb = RectF(cropRect)
-    rectWeb.offset(
-        (overlayLoc[0] - webLoc[0]).toFloat(),
-        (overlayLoc[1] - webLoc[1]).toFloat()
-    )
-
-    rectWeb.left = rectWeb.left.coerceIn(0f, webView.width.toFloat())
-    rectWeb.right = rectWeb.right.coerceIn(0f, webView.width.toFloat())
-    rectWeb.top = rectWeb.top.coerceIn(0f, webView.height.toFloat())
-    rectWeb.bottom = rectWeb.bottom.coerceIn(0f, webView.height.toFloat())
-
-    cropFromViewport(full, rectWeb, webView.width, webView.height)
-} else {
-    full
-}
-
-        val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
-        if (outBitmap !== full) outBitmap.recycle()
-        full.recycle()
-
-        info.text = "Saved image: $name"
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            finish()
-        }, 600)
-
-    } catch (_: Throwable) {
-        info.text = "Save failed"
-    }
-}
-
-        // ذخیره PDF کل صفحه
-        savePdfBtn.setOnClickListener {
-            info.text = "Generating PDF…"
-            saveImgBtn.isEnabled = false
-            savePdfBtn.isEnabled = false
-
-            createPdfFromWebView(webView) { msg ->
-                info.text = msg
-                finish()
-            }
-        }
 
         webView.webViewClient = object : WebViewClient() {
 
@@ -304,8 +215,8 @@ val outBitmap = if (cropRect != null) {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                saveImgBtn.isEnabled = true
-                savePdfBtn.isEnabled = true
+                fabCrop.isEnabled = true
+                toolbar.menu.findItem(menuPdfId)?.isEnabled = true
 
                 // لاگ viewport/UA برای تشخیص موبایل/دسکتاپ
                 view.evaluateJavascript(
@@ -315,26 +226,85 @@ val outBitmap = if (cropRect != null) {
                 }
 
                 // fallback فقط اگر DocumentStartScript نداریم
-                if (modeSwitch.isChecked && !docStartScriptInstalled && !injectedOnce) {
+                if (desktopMode && !docStartScriptInstalled && !injectedOnce) {
                     injectedOnce = true
                     forceDesktopViewport(view)
                     view.reload()
                     return
                 }
-
-                info.text =
-                    "Loaded. SELECT: OFF برای اسکرول، SELECT: ON برای انتخاب کادر. سپس Crop & Save یا Save PDF."
             }
         }
 
         reloadCurrent(webView)
     }
 
+    private fun setupToolbarMenu(prefs: android.content.SharedPreferences) {
+        val m = toolbar.menu
+        m.clear()
+
+        val itemDesktop = m.add(0, menuDesktopId, 0, "Desktop mode")
+        itemDesktop.isCheckable = true
+        itemDesktop.isChecked = desktopMode
+
+        val itemReload = m.add(0, menuReloadId, 1, "Reload")
+
+        val itemPdf = m.add(0, menuPdfId, 2, "Save PDF")
+        itemPdf.isEnabled = false
+
+        toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                menuDesktopId -> {
+                    desktopMode = !item.isChecked
+                    item.isChecked = desktopMode
+                    prefs.edit().putBoolean("desktop_mode", desktopMode).apply()
+
+                    injectedOnce = false
+                    applyDesktopMode(webView, desktopMode)
+
+                    webView.clearCache(true)
+                    webView.clearHistory()
+
+                    overlay.clearSelection()
+                    selectOn = false
+                    overlay.setSelectionEnabled(false)
+                    overlay.visibility = View.GONE
+
+                    fabCrop.isEnabled = false
+                    toolbar.menu.findItem(menuPdfId)?.isEnabled = false
+
+                    reloadCurrent(webView)
+                    true
+                }
+
+                menuReloadId -> {
+                    injectedOnce = false
+                    overlay.clearSelection()
+                    webView.reload()
+                    true
+                }
+
+                menuPdfId -> {
+                    Toast.makeText(this, "Generating PDF…", Toast.LENGTH_SHORT).show()
+                    fabCrop.isEnabled = false
+                    toolbar.menu.findItem(menuPdfId)?.isEnabled = false
+
+                    createPdfFromWebView(webView) { msg ->
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                        finish()
+                    }
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
     private fun installDesktopViewportDocStartScript(webView: WebView): Boolean {
         return try {
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
 
-            // مهم: Script فقط وقتی UA دسکتاپ باشد اعمال می‌شود (پس با خاموش کردن Desktop mode، خودکار غیرفعال می‌شود)
+            // مهم: Script فقط وقتی UA دسکتاپ باشد اعمال می‌شود
             val script = """
                 (function(){
                   try{
@@ -356,9 +326,7 @@ val outBitmap = if (cropRect != null) {
                 })();
             """.trimIndent()
 
-            // برای همه originها (اگر روی دستگاهی validate سخت‌گیرانه بود، try/catch جلوی کرش را می‌گیرد)
             val rules = setOf("*")
-
             WebViewCompat.addDocumentStartJavaScript(webView, script, rules)
             true
         } catch (_: Throwable) {
@@ -411,7 +379,6 @@ val outBitmap = if (cropRect != null) {
         s.displayZoomControls = false
 
         s.domStorageEnabled = true
-
         webView.setInitialScale(0)
     }
 
@@ -449,14 +416,18 @@ val outBitmap = if (cropRect != null) {
         val r = max(left, right)
         val b = max(top, bottom)
 
-        val x = l.toInt().coerceIn(0, src.width - 1)
-        val y = t.toInt().coerceIn(0, src.height - 1)
-        val w = (r - l).toInt().coerceAtLeast(1).coerceAtMost(src.width - x)
-        val h = (b - t).toInt().coerceAtLeast(1).coerceAtMost(src.height - y)
+        val scaleX = src.width.toFloat() / viewW.toFloat()
+        val scaleY = src.height.toFloat() / viewH.toFloat()
+
+        val x = (l * scaleX).roundToInt().coerceIn(0, src.width - 1)
+        val y = (t * scaleY).roundToInt().coerceIn(0, src.height - 1)
+        val w = ((r - l) * scaleX).roundToInt().coerceAtLeast(1).coerceAtMost(src.width - x)
+        val h = ((b - t) * scaleY).roundToInt().coerceAtLeast(1).coerceAtMost(src.height - y)
 
         return Bitmap.createBitmap(src, x, y, w, h)
     }
-        private fun createPdfFromWebView(webView: WebView, done: (message: String) -> Unit) {
+
+    private fun createPdfFromWebView(webView: WebView, done: (message: String) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
             done("PDF is not supported on this Android version.")
             return
@@ -487,7 +458,10 @@ val outBitmap = if (cropRect != null) {
             }
 
             WebViewPdfSaver.writeWebViewToPdf(webView, jobName, attrs, pfd) { ok, err ->
-                try { pfd.close() } catch (_: Throwable) {}
+                try {
+                    pfd.close()
+                } catch (_: Throwable) {
+                }
 
                 if (!ok) {
                     done("PDF failed: ${err ?: "unknown"}")
@@ -513,7 +487,7 @@ val outBitmap = if (cropRect != null) {
         }
     }
 
-    private fun createPdfOutput(baseName: String): Pair<Uri?, File?> {
+    private fun createPdfOutput(baseName: String): Pair<Uri?, java.io.File?> {
         val fileName = "$baseName.pdf"
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -531,99 +505,12 @@ val outBitmap = if (cropRect != null) {
             )
             Pair(uri, null)
         } else {
-            val dir = File(
+            val dir = java.io.File(
                 getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                 "WebToImage"
             )
             if (!dir.exists()) dir.mkdirs()
-            Pair(null, File(dir, fileName))
-        }
-    }
-
-    private class SelectionOverlayView(context: Activity) : View(context) {
-        private val shadePaint = Paint().apply {
-            color = 0x66000000
-            style = Paint.Style.FILL
-        }
-        private val borderPaint = Paint().apply {
-            color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            isAntiAlias = true
-        }
-
-        private var selectionEnabled = false
-
-        private var startX = 0f
-        private var startY = 0f
-        private var endX = 0f
-        private var endY = 0f
-        private var dragging = false
-
-        fun setSelectionEnabled(enabled: Boolean) {
-            selectionEnabled = enabled
-        }
-
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (!selectionEnabled) return false
-            parent?.requestDisallowInterceptTouchEvent(true)
-
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    dragging = true
-                    startX = event.x
-                    startY = event.y
-                    endX = startX
-                    endY = startY
-                    invalidate()
-                    return true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (!dragging) return false
-                    endX = event.x
-                    endY = event.y
-                    invalidate()
-                    return true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    dragging = false
-                    endX = event.x
-                    endY = event.y
-                    invalidate()
-                    return true
-                }
-            }
-            return super.onTouchEvent(event)
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            val rect = getSelectionRect() ?: return
-
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shadePaint)
-
-            val clearPaint = Paint().apply {
-                xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
-            }
-            val saved = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
-            canvas.drawRect(rect, clearPaint)
-            canvas.restoreToCount(saved)
-
-            canvas.drawRect(rect, borderPaint)
-        }
-
-        fun clearSelection() {
-            startX = 0f; startY = 0f; endX = 0f; endY = 0f
-            invalidate()
-        }
-
-        fun getSelectionRect(): RectF? {
-            if (abs(endX - startX) < 20f || abs(endY - startY) < 20f) return null
-            val l = min(startX, endX).coerceIn(0f, width.toFloat())
-            val t = min(startY, endY).coerceIn(0f, height.toFloat())
-            val r = max(startX, endX).coerceIn(0f, width.toFloat())
-            val b = max(startY, endY).coerceIn(0f, width.toFloat())
-            return RectF(l, t, r, b)
+            Pair(null, java.io.File(dir, fileName))
         }
     }
 }
