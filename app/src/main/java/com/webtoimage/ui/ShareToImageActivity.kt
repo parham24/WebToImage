@@ -121,12 +121,17 @@ class ShareToImageActivity : AppCompatActivity() {
         fabCrop.isEnabled = false
 
         fabSelect.setOnClickListener {
-            selectOn = !selectOn
-            overlay.clearSelection()
-            overlay.setSelectionEnabled(selectOn)
-            overlay.visibility = if (selectOn) View.VISIBLE else View.GONE
-        }
+    selectOn = !selectOn
+    overlay.clearSelection()
+    overlay.setSelectionEnabled(selectOn)
+    overlay.visibility = if (selectOn) View.VISIBLE else View.GONE
 
+    if (selectOn) {
+        overlay.bringToFront()
+        overlay.requestFocus()
+        Toast.makeText(this, "Drag روی صفحه برای انتخاب کادر", Toast.LENGTH_SHORT).show()
+    }
+        }
         fabClear.setOnClickListener {
             overlay.clearSelection()
         }
