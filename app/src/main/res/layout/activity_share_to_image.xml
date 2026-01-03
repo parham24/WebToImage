@@ -13,7 +13,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:title="WebToImage"/>
+            app:title="WebToImage" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
@@ -25,7 +25,7 @@
         <WebView
             android:id="@+id/webView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
+            android:layout_height="match_parent" />
 
         <com.webtoimage.ui.SelectionOverlayView
             android:id="@+id/overlay"
@@ -33,32 +33,47 @@
             android:layout_height="match_parent"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"/>
+            android:focusableInTouchMode="true" />
     </FrameLayout>
 
+    <!-- Crop & Save (Extended FAB) -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabCrop"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:text="Crop &amp; Save"
+        app:icon="@drawable/ic_crop_24"
+        app:backgroundTint="@color/fab_bg"
+        app:iconTint="@color/fab_icon"
+        android:textColor="@color/fab_text"
         app:layout_anchor="@id/webFrame"
-        app:layout_anchorGravity="bottom|end"/>
+        app:layout_anchorGravity="bottom|end" />
 
+    <!-- Select area (FAB) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabSelect"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:contentDescription="Select area"
+        app:srcCompat="@drawable/ic_select_24"
+        app:backgroundTint="@color/fab_bg"
+        app:tint="@color/fab_icon"
         app:layout_anchor="@id/webFrame"
-        app:layout_anchorGravity="bottom|start"/>
+        app:layout_anchorGravity="bottom|start" />
 
+    <!-- Clear selection (FAB) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabClear"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
+        android:contentDescription="Clear selection"
+        app:srcCompat="@drawable/ic_clear_24"
+        app:backgroundTint="@color/fab_bg"
+        app:tint="@color/fab_icon"
         app:layout_anchor="@id/webFrame"
-        app:layout_anchorGravity="bottom|center"/>
+        app:layout_anchorGravity="bottom|center" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
