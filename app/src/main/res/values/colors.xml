@@ -1,0 +1,5 @@
+<resources>
+    <color name="fab_bg">#00C7B3</color>     <!-- رنگ پس‌زمینه دکمه‌ها -->
+    <color name="fab_icon">#FFFFFF</color>   <!-- رنگ آیکن -->
+    <color name="fab_text">#FFFFFF</color>   <!-- رنگ متن دکمه Crop & Save -->
+</resources>
