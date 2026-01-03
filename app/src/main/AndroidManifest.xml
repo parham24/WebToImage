@@ -6,7 +6,7 @@
     <application
         android:label="WebToImage"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
-
+        android:theme="@style/Theme.WebToImage"
         <!-- Launcher -->
         <activity
             android:name=".MainActivity"
