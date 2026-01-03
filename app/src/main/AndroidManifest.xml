@@ -5,8 +5,8 @@
 
     <application
         android:label="WebToImage"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
         android:theme="@style/Theme.WebToImage">
+
         <!-- Launcher -->
         <activity
             android:name=".MainActivity"
@@ -18,44 +18,24 @@
         </activity>
 
         <!-- Share target -->
-        <!-- Share target -->
-<activity
-    android:name=".ui.ShareToImageActivity"
-    android:exported="true">
+        <activity
+            android:name=".ui.ShareToImageActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
 
-    <!-- Share text -->
-    <intent-filter>
-        <action android:name="android.intent.action.SEND" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <data android:mimeType="text/*" />
-    </intent-filter>
-    
-    <intent-filter>
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="http" />
-    <data android:scheme="https" />
-</intent-filter>
-
-<intent-filter>
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="http" />
-    <data android:scheme="https" />
-</intent-filter>
-    
-    <!-- Open URL (Chrome may send ACTION_VIEW) -->
-    <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="http" />
-        <data android:scheme="https" />
-    </intent-filter>
-
-</activity>
+            <!-- Open URL (Chrome may send ACTION_VIEW) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
 
         <!-- Print service -->
         <service
