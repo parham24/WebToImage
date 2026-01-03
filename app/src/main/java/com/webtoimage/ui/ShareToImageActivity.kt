@@ -183,26 +183,30 @@ class ShareToImageActivity : AppCompatActivity() {
         }
 
         // دریافت متن Share شده
-        val sharedText: String? = when (intent?.action) {
+        val incoming: String? = when (intent?.action) {
+
+    Intent.ACTION_VIEW -> {
+        intent.dataString
+    }
+
     Intent.ACTION_SEND -> {
         val t1 = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
         val t2 = intent.clipData?.let { cd ->
-            if (cd.itemCount > 0) cd.getItemAt(0).coerceToText(this).toString() else null
+            if (cd.itemCount > 0) cd.getItemAt(0).coerceToText(this)?.toString() else null
         }
         t1 ?: t2
     }
+
     else -> null
 }
 
-if (sharedText.isNullOrBlank()) {
-    Toast.makeText(this, "No shared text received.", Toast.LENGTH_SHORT).show()
-    finish()
+if (incoming.isNullOrBlank()) {
+    Toast.makeText(this, "Nothing received from Share", Toast.LENGTH_LONG).show()
     return
 }
 
-        currentLoad = sharedText.trim()
-        isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
-
+currentLoad = incoming.trim()
+isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
         webView.webViewClient = object : WebViewClient() {
 
             override fun onReceivedError(
