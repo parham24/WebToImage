@@ -1,5 +1,6 @@
 package com.webtoimage.ui
 
+import com.webtoimage.R
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
