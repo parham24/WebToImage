@@ -183,15 +183,22 @@ class ShareToImageActivity : AppCompatActivity() {
         }
 
         // دریافت متن Share شده
-        val sharedText = if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            intent.getStringExtra(Intent.EXTRA_TEXT)
-        } else null
-
-        if (sharedText.isNullOrBlank()) {
-            Toast.makeText(this, "No shared text received.", Toast.LENGTH_SHORT).show()
-            finish()
-            return
+        val sharedText: String? = when (intent?.action) {
+    Intent.ACTION_SEND -> {
+        val t1 = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+        val t2 = intent.clipData?.let { cd ->
+            if (cd.itemCount > 0) cd.getItemAt(0).coerceToText(this).toString() else null
         }
+        t1 ?: t2
+    }
+    else -> null
+}
+
+if (sharedText.isNullOrBlank()) {
+    Toast.makeText(this, "No shared text received.", Toast.LENGTH_SHORT).show()
+    finish()
+    return
+}
 
         currentLoad = sharedText.trim()
         isUrl = currentLoad!!.startsWith("http://") || currentLoad!!.startsWith("https://")
