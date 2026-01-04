@@ -187,16 +187,36 @@ class ShareToImageActivity : AppCompatActivity() {
         }
 
         // ذخیره تصویر (viewport) + crop
-        fabCrop.setOnClickListener {
+fabCrop.setOnClickListener {
+    try {
+        // Rect را فریز کن که در لحظه‌ی redraw تغییر نکند
+        val cropRect = overlay.getSelectionRect()?.let { RectF(it) }
+
+        // overlay توی عکس نیفتد
+        val oldVis = overlay.visibility
+        overlay.visibility = View.INVISIBLE
+
+        captureViewportAccurate(webView) { full ->
             try {
-                val full = captureViewport(webView)
-
-                // Rect را فریز کن که در لحظه‌ی redraw تغییر نکند
-                val cropRect = overlay.getSelectionRect()?.let { RectF(it) }
-
-                // FIX: هیچ تبدیل مختصاتِ screen انجام نده (بدون getLocationOnScreen/offset)
                 val outBitmap = if (cropRect != null) {
-                    cropFromViewport(full, cropRect, webView.width, webView.height)
+                    // تبدیل Rect از مختصات overlay به مختصات webView
+                    val overlayLoc = IntArray(2)
+                    val webLoc = IntArray(2)
+                    overlay.getLocationInWindow(overlayLoc)
+                    webView.getLocationInWindow(webLoc)
+
+                    val rectWeb = RectF(cropRect)
+                    rectWeb.offset(
+                        (overlayLoc[0] - webLoc[0]).toFloat(),
+                        (overlayLoc[1] - webLoc[1]).toFloat()
+                    )
+
+                    rectWeb.left = rectWeb.left.coerceIn(0f, webView.width.toFloat())
+                    rectWeb.right = rectWeb.right.coerceIn(0f, webView.width.toFloat())
+                    rectWeb.top = rectWeb.top.coerceIn(0f, webView.height.toFloat())
+                    rectWeb.bottom = rectWeb.bottom.coerceIn(0f, webView.height.toFloat())
+
+                    cropFromViewport(full, rectWeb, webView.width, webView.height)
                 } else {
                     full
                 }
@@ -206,15 +226,19 @@ class ShareToImageActivity : AppCompatActivity() {
                 full.recycle()
 
                 Toast.makeText(this, "Saved image: $name", Toast.LENGTH_SHORT).show()
-
-                Handler(Looper.getMainLooper()).postDelayed({
-                    finish()
-                }, 600)
+                Handler(Looper.getMainLooper()).postDelayed({ finish() }, 600)
 
             } catch (_: Throwable) {
                 Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            } finally {
+                overlay.visibility = oldVis
             }
         }
+
+    } catch (_: Throwable) {
+        Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+    }
+}
 
         // ---- دریافت ورودی از Share/Chrome (SEND و VIEW) ----
         val incoming = readIncomingText(intent)
@@ -537,6 +561,35 @@ class ShareToImageActivity : AppCompatActivity() {
         }
     }
 
+    private fun captureViewportAccurate(webView: WebView, done: (Bitmap) -> Unit) {
+    // اندروید O به بالا
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val loc = IntArray(2)
+        webView.getLocationInWindow(loc) // مهم: window coords [web:2964]
+        val rect = android.graphics.Rect(
+            loc[0],
+            loc[1],
+            loc[0] + webView.width,
+            loc[1] + webView.height
+        )
+
+        val bitmap = Bitmap.createBitmap(webView.width, webView.height, Bitmap.Config.ARGB_8888)
+        android.view.PixelCopy.request(
+            window,
+            rect,
+            bitmap,
+            { result ->
+                if (result == android.view.PixelCopy.SUCCESS) done(bitmap) else done(bitmap)
+            },
+            Handler(Looper.getMainLooper())
+        )
+        return
+    }
+
+    // fallback قدیمی
+    done(captureViewport(webView))
+    }
+    
     private fun createPdfOutput(baseName: String): Pair<Uri?, java.io.File?> {
         val fileName = "$baseName.pdf"
 
