@@ -36,53 +36,63 @@
             android:focusableInTouchMode="true" />
     </FrameLayout>
 
-    <!-- Bottom actions bar: همه دکمه‌ها داخل یک container تا همپوشانی نشود -->
-    <LinearLayout
-        android:id="@+id/actionsBar"
+    <!-- Bottom actions bar: ستون چپ (روی هم) -->
+<LinearLayout
+    android:id="@+id/actionsBar"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_margin="16dp"
+    android:orientation="vertical"
+    android:gravity="start|center_vertical"
+    android:layoutDirection="ltr"
+    app:layout_anchor="@id/webFrame"
+    app:layout_anchorGravity="bottom|start">
+
+    <!-- SELECT (mini) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabSelect"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layoutDirection="ltr"
-        app:layout_anchor="@id/webFrame"
-        app:layout_anchorGravity="bottom|center_horizontal">
+        android:contentDescription="Select area"
+        android:tooltipText="Select"
+        android:layout_marginBottom="10dp"
+        app:srcCompat="@drawable/ic_select_24"
+        app:backgroundTint="@color/fab_bg"
+        app:tint="@color/fab_icon"
+        app:fabSize="mini"
+        app:maxImageSize="20dp" />
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-            android:id="@+id/fabSelect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SELECT"
-            android:contentDescription="Select area"
-            android:layout_marginEnd="12dp"
-            app:icon="@drawable/ic_select_24"
-            app:backgroundTint="@color/fab_bg"
-            app:iconTint="@color/fab_icon"
-            android:textColor="@color/fab_text" />
+    <!-- CLEAR (mini) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabClear"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="Clear selection"
+        android:tooltipText="Clear"
+        android:layout_marginBottom="10dp"
+        app:srcCompat="@drawable/ic_clear_24"
+        app:backgroundTint="@color/fab_bg"
+        app:tint="@color/fab_icon"
+        app:fabSize="mini"
+        app:maxImageSize="20dp" />
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-            android:id="@+id/fabClear"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="CLEAR"
-            android:contentDescription="Clear selection"
-            android:layout_marginEnd="12dp"
-            app:icon="@drawable/ic_clear_24"
-            app:backgroundTint="@color/fab_bg"
-            app:iconTint="@color/fab_icon"
-            android:textColor="@color/fab_text" />
+    <!-- CROP (متن‌دار) -->
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:id="@+id/fabCrop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="CROP &amp; SAVE"
+        android:textSize="12sp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:contentDescription="Crop and save"
+        app:icon="@drawable/ic_crop_24"
+        app:iconSize="18dp"
+        app:iconPadding="6dp"
+        app:backgroundTint="@color/fab_bg"
+        app:iconTint="@color/fab_icon"
+        android:textColor="@color/fab_text" />
 
-        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-            android:id="@+id/fabCrop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="CROP &amp; SAVE"
-            android:contentDescription="Crop and save"
-            app:icon="@drawable/ic_crop_24"
-            app:backgroundTint="@color/fab_bg"
-            app:iconTint="@color/fab_icon"
-            android:textColor="@color/fab_text" />
-
-    </LinearLayout>
+</LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
