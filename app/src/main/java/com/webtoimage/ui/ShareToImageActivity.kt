@@ -30,7 +30,6 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.webtoimage.util.GallerySaver
 import kotlin.math.max
 import kotlin.math.min
@@ -53,8 +52,8 @@ class ShareToImageActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var overlay: SelectionOverlayView
     private lateinit var fabCrop: ExtendedFloatingActionButton
-    private lateinit var fabSelect: FloatingActionButton
-    private lateinit var fabClear: FloatingActionButton
+    private lateinit var fabSelect: ExtendedFloatingActionButton
+    private lateinit var fabClear: ExtendedFloatingActionButton
 
     // آیتم‌های منو (برنامه‌نویسی)
     private var menuReloadId = 1
