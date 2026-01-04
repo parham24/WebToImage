@@ -454,7 +454,7 @@ class ShareToImageActivity : AppCompatActivity() {
         webView.draw(canvas)
         return bitmap
     }
-
+    
     private fun cropFromViewport(src: Bitmap, cropRect: RectF, viewW: Int, viewH: Int): Bitmap {
         val left = cropRect.left.coerceIn(0f, viewW.toFloat())
         val top = cropRect.top.coerceIn(0f, viewH.toFloat())
