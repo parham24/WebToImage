@@ -189,49 +189,55 @@ class ShareToImageActivity : AppCompatActivity() {
         // ذخیره تصویر (viewport) + crop
 fabCrop.setOnClickListener {
     try {
-        // Rect را فریز کن که در لحظه‌ی redraw تغییر نکند
+        // 1) Rect را فریز کن
         val cropRect = overlay.getSelectionRect()?.let { RectF(it) }
 
-        // overlay توی عکس نیفتد
+        // 2) rectWeb را قبل از مخفی‌کردن overlay بساز (برای crop لازم می‌شود)
+        val rectWeb: RectF? = if (cropRect != null) {
+            val overlayLoc = IntArray(2)
+            val webLoc = IntArray(2)
+            overlay.getLocationInWindow(overlayLoc)
+            webView.getLocationInWindow(webLoc)
+
+            RectF(cropRect).apply {
+                offset(
+                    (overlayLoc[0] - webLoc[0]).toFloat(),
+                    (overlayLoc[1] - webLoc[1]).toFloat()
+                )
+                left = left.coerceIn(0f, webView.width.toFloat())
+                right = right.coerceIn(0f, webView.width.toFloat())
+                top = top.coerceIn(0f, webView.height.toFloat())
+                bottom = bottom.coerceIn(0f, webView.height.toFloat())
+            }
+        } else null
+
+        // 3) overlay را خاموش کن
         val oldVis = overlay.visibility
-        overlay.visibility = View.INVISIBLE
+        overlay.visibility = View.GONE
+        overlay.setSelectionEnabled(false)
 
-        captureViewportAccurate(webView) { full ->
-            try {
-                val outBitmap = if (cropRect != null) {
-                    // تبدیل Rect از مختصات overlay به مختصات webView
-                    val overlayLoc = IntArray(2)
-                    val webLoc = IntArray(2)
-                    overlay.getLocationInWindow(overlayLoc)
-                    webView.getLocationInWindow(webLoc)
+        // 4) یک فریم صبر کن، بعد PixelCopy بگیر
+        webView.post {
+            captureViewportAccurate(webView) { full ->
+                try {
+                    val outBitmap = if (rectWeb != null) {
+                        cropFromViewport(full, rectWeb, webView.width, webView.height)
+                    } else full
 
-                    val rectWeb = RectF(cropRect)
-                    rectWeb.offset(
-                        (overlayLoc[0] - webLoc[0]).toFloat(),
-                        (overlayLoc[1] - webLoc[1]).toFloat()
-                    )
+                    val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
+                    if (outBitmap !== full) outBitmap.recycle()
+                    full.recycle()
 
-                    rectWeb.left = rectWeb.left.coerceIn(0f, webView.width.toFloat())
-                    rectWeb.right = rectWeb.right.coerceIn(0f, webView.width.toFloat())
-                    rectWeb.top = rectWeb.top.coerceIn(0f, webView.height.toFloat())
-                    rectWeb.bottom = rectWeb.bottom.coerceIn(0f, webView.height.toFloat())
+                    Toast.makeText(this, "Saved image: $name", Toast.LENGTH_SHORT).show()
+                    Handler(Looper.getMainLooper()).postDelayed({ finish() }, 600)
 
-                    cropFromViewport(full, rectWeb, webView.width, webView.height)
-                } else {
-                    full
+                } catch (_: Throwable) {
+                    Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+                } finally {
+                    // 5) overlay را برگردان
+                    overlay.setSelectionEnabled(true)
+                    overlay.visibility = oldVis
                 }
-
-                val name = GallerySaver.saveToGallery(this, outBitmap, "share_crop")
-                if (outBitmap !== full) outBitmap.recycle()
-                full.recycle()
-
-                Toast.makeText(this, "Saved image: $name", Toast.LENGTH_SHORT).show()
-                Handler(Looper.getMainLooper()).postDelayed({ finish() }, 600)
-
-            } catch (_: Throwable) {
-                Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
-            } finally {
-                overlay.visibility = oldVis
             }
         }
 
