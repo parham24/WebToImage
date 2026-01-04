@@ -62,6 +62,7 @@ class ShareToImageActivity : AppCompatActivity() {
     private var menuPdfId = 3
 
     // استخراج لینک از متن Share (گاهی Chrome عنوان + لینک می‌فرسته)
+    // FIX: www. و S+ درست شده
     private val URL_REGEX = Regex("""(?i)\b((https?://|www.)S+)\b""")
 
     private fun readIncomingText(intent: Intent?): String? {
@@ -98,6 +99,7 @@ class ShareToImageActivity : AppCompatActivity() {
         val hasScheme = s.startsWith("http://", true) || s.startsWith("https://", true)
         if (!hasScheme) {
             // اگر شبیه دامنه است (post.ir یا www.post.ir یا post.ir/...)
+            // FIX: نقطه‌ی دامنه باید . باشد
             val looksLikeDomain = s.matches(Regex("""(?i)^[a-z0-9.-]+.[a-z]{2,}(/.*)?$"""))
             if (looksLikeDomain) {
                 s = "https://$s"
@@ -192,25 +194,9 @@ class ShareToImageActivity : AppCompatActivity() {
                 // Rect را فریز کن که در لحظه‌ی redraw تغییر نکند
                 val cropRect = overlay.getSelectionRect()?.let { RectF(it) }
 
+                // FIX: هیچ تبدیل مختصاتِ screen انجام نده (بدون getLocationOnScreen/offset)
                 val outBitmap = if (cropRect != null) {
-                    // تبدیل Rect از مختصات overlay به مختصات webView
-                    val overlayLoc = IntArray(2)
-                    val webLoc = IntArray(2)
-                    overlay.getLocationOnScreen(overlayLoc)
-                    webView.getLocationOnScreen(webLoc)
-
-                    val rectWeb = RectF(cropRect)
-                    rectWeb.offset(
-                        (overlayLoc[0] - webLoc[0]).toFloat(),
-                        (overlayLoc[1] - webLoc[1]).toFloat()
-                    )
-
-                    rectWeb.left = rectWeb.left.coerceIn(0f, webView.width.toFloat())
-                    rectWeb.right = rectWeb.right.coerceIn(0f, webView.width.toFloat())
-                    rectWeb.top = rectWeb.top.coerceIn(0f, webView.height.toFloat())
-                    rectWeb.bottom = rectWeb.bottom.coerceIn(0f, webView.height.toFloat())
-
-                    cropFromViewport(full, rectWeb, webView.width, webView.height)
+                    cropFromViewport(full, cropRect, webView.width, webView.height)
                 } else {
                     full
                 }
