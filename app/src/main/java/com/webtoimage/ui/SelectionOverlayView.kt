@@ -1,11 +1,13 @@
 package com.webtoimage.ui
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -14,105 +16,103 @@ class SelectionOverlayView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
-    }
+    private var enabledSelection = false
 
-    private val shadePaint = Paint().apply {
-        color = 0x66000000
+    private var downX = 0f
+    private var downY = 0f
+    private var curX = 0f
+    private var curY = 0f
+
+    private var hasRect = false
+
+    private val dimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x66000000  // نیمه‌شفاف
         style = Paint.Style.FILL
     }
 
-    private val borderPaint = Paint().apply {
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = 4f
-        isAntiAlias = true
+        strokeWidth = 3f
     }
 
-    private var selectionEnabled = false
+    private val rect = RectF()
 
-    private var startX = 0f
-    private var startY = 0f
-    private var endX = 0f
-    private var endY = 0f
-    private var dragging = false
-
-    fun setSelectionEnabled(enabled: Boolean) {
-        selectionEnabled = enabled
+    fun setSelectionEnabled(on: Boolean) {
+        enabledSelection = on
+        if (!on) {
+            clearSelection()
+        }
+        invalidate()
     }
+
+    fun clearSelection() {
+        hasRect = false
+        rect.setEmpty()
+        invalidate()
+    }
+
+    fun getSelectionRect(): RectF? = if (hasRect) RectF(rect) else null
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!selectionEnabled) return false
-        parent?.requestDisallowInterceptTouchEvent(true)
+        if (!enabledSelection) return false
 
+        // مهم: از event.x/y (مختصات محلی View) استفاده می‌کنیم [web:2743]
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                dragging = true
-                startX = event.x
-                startY = event.y
-                endX = startX
-                endY = startY
-                invalidate()
+                downX = event.x
+                downY = event.y
+                curX = downX
+                curY = downY
+                hasRect = true
+                parent?.requestDisallowInterceptTouchEvent(true)
+                updateRect()
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (!dragging) return false
-                endX = event.x
-                endY = event.y
-                invalidate()
+                curX = event.x
+                curY = event.y
+                updateRect()
                 return true
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                dragging = false
-                endX = event.x
-                endY = event.y
-                invalidate()
+                curX = event.x
+                curY = event.y
+                updateRect()
+                parent?.requestDisallowInterceptTouchEvent(false)
                 return true
             }
         }
         return super.onTouchEvent(event)
     }
 
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-
-        val rect = getSelectionRect() ?: return
-
-        // کل صفحه را سایه می‌زنیم
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shadePaint)
-
-        // وسط کادر را "خالی" می‌کنیم
-        val clearPaint = Paint().apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
-        }
-
-        val saved = canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
-        canvas.drawRect(rect, clearPaint)
-        canvas.restoreToCount(saved)
-
-        // دور کادر
-        canvas.drawRect(rect, borderPaint)
-    }
-
-    fun clearSelection() {
-        startX = 0f
-        startY = 0f
-        endX = 0f
-        endY = 0f
+    private fun updateRect() {
+        val l = min(downX, curX).coerceIn(0f, width.toFloat())
+        val t = min(downY, curY).coerceIn(0f, height.toFloat())
+        val r = max(downX, curX).coerceIn(0f, width.toFloat())
+        val b = max(downY, curY).coerceIn(0f, height.toFloat())
+        rect.set(l, t, r, b)
         invalidate()
     }
 
-    fun getSelectionRect(): RectF? {
-        if (abs(endX - startX) < 20f || abs(endY - startY) < 20f) return null
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
 
-        val l = min(startX, endX).coerceIn(0f, width.toFloat())
-        val t = min(startY, endY).coerceIn(0f, height.toFloat())
-        val r = max(startX, endX).coerceIn(0f, width.toFloat())
-        val b = max(startY, endY).coerceIn(0f, height.toFloat())
+        if (!enabledSelection || !hasRect) return
 
-        return RectF(l, t, r, b)
+        // تار کردن پشت
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+
+        // پاک کردن داخل کادر (نمایش واضح ناحیه انتخابی)
+        val clearPaint = Paint().apply { xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR) }
+        canvas.saveLayer(null, null)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+        canvas.drawRect(rect, clearPaint)
+        canvas.restore()
+
+        // کادر سفید
+        canvas.drawRect(rect, borderPaint)
     }
 }
